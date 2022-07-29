@@ -3,16 +3,21 @@
 #![allow(non_snake_case)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
+use crate::poseidon_transcript::PoseidonTranscript;
+
 use super::super::errors::ProofVerifyError;
-use super::super::group::{CompressedGroup, GroupElement, VartimeMultiscalarMul, CompressGroupElement, DecompressGroupElement};
+use super::super::group::{
+  CompressGroupElement, CompressedGroup, DecompressGroupElement, GroupElement,
+  VartimeMultiscalarMul,
+};
 use super::super::scalar::Scalar;
 use super::super::transcript::ProofTranscript;
-use core::iter;
-use std::ops::MulAssign;
-use merlin::Transcript;
+use ark_ff::{fields, Field};
 use ark_serialize::*;
-use ark_ff::{Field, fields};
-use ark_std::{One, Zero}; 
+use ark_std::{One, Zero};
+use core::iter;
+use merlin::Transcript;
+use std::ops::MulAssign;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct BulletReductionProof {
@@ -32,7 +37,7 @@ impl BulletReductionProof {
   /// The lengths of the vectors must all be the same, and must all be
   /// either 0 or a power of 2.
   pub fn prove(
-    transcript: &mut Transcript,
+    transcript: &mut PoseidonTranscript,
     Q: &GroupElement,
     G_vec: &[GroupElement],
     H: &GroupElement,
@@ -86,22 +91,40 @@ impl BulletReductionProof {
         a_L
           .iter()
           .chain(iter::once(&c_L))
-          .chain(iter::once(blind_L)).map(|s| *s).collect::<Vec<Scalar>>().as_slice(),
-        G_R.iter().chain(iter::once(Q)).chain(iter::once(H)).map(|p| *p).collect::<Vec<GroupElement>>().as_slice(),
+          .chain(iter::once(blind_L))
+          .map(|s| *s)
+          .collect::<Vec<Scalar>>()
+          .as_slice(),
+        G_R
+          .iter()
+          .chain(iter::once(Q))
+          .chain(iter::once(H))
+          .map(|p| *p)
+          .collect::<Vec<GroupElement>>()
+          .as_slice(),
       );
 
       let R = GroupElement::vartime_multiscalar_mul(
         a_R
           .iter()
           .chain(iter::once(&c_R))
-          .chain(iter::once(blind_R)).map(|s| *s).collect::<Vec<Scalar>>().as_slice(),
-        G_L.iter().chain(iter::once(Q)).chain(iter::once(H)).map(|p| *p).collect::<Vec<GroupElement>>().as_slice(),
+          .chain(iter::once(blind_R))
+          .map(|s| *s)
+          .collect::<Vec<Scalar>>()
+          .as_slice(),
+        G_L
+          .iter()
+          .chain(iter::once(Q))
+          .chain(iter::once(H))
+          .map(|p| *p)
+          .collect::<Vec<GroupElement>>()
+          .as_slice(),
       );
 
-      transcript.append_point(b"L", &L.compress());
-      transcript.append_point(b"R", &R.compress());
+      transcript.append_point(&L.compress());
+      transcript.append_point(&R.compress());
 
-      let u = transcript.challenge_scalar(b"u");
+      let u = transcript.challenge_scalar();
       let u_inv = u.inverse().unwrap();
 
       for i in 0..n {
@@ -139,7 +162,7 @@ impl BulletReductionProof {
   fn verification_scalars(
     &self,
     n: usize,
-    transcript: &mut Transcript,
+    transcript: &mut PoseidonTranscript,
   ) -> Result<(Vec<Scalar>, Vec<Scalar>, Vec<Scalar>), ProofVerifyError> {
     let lg_n = self.L_vec.len();
     if lg_n >= 32 {
@@ -154,14 +177,14 @@ impl BulletReductionProof {
     // 1. Recompute x_k,...,x_1 based on the proof transcript
     let mut challenges = Vec::with_capacity(lg_n);
     for (L, R) in self.L_vec.iter().zip(self.R_vec.iter()) {
-      transcript.append_point(b"L", L);
-      transcript.append_point(b"R", R);
-      challenges.push(transcript.challenge_scalar(b"u"));
+      transcript.append_point(L);
+      transcript.append_point(R);
+      challenges.push(transcript.challenge_scalar());
     }
 
     // 2. Compute 1/(u_k...u_1) and 1/u_k, ..., 1/u_1
     let mut challenges_inv: Vec<Scalar> = challenges.clone();
-     
+
     ark_ff::fields::batch_inversion(&mut challenges_inv);
     let mut allinv: Scalar = Scalar::one();
     for c in challenges.iter().filter(|s| !s.is_zero()) {
@@ -200,7 +223,7 @@ impl BulletReductionProof {
     &self,
     n: usize,
     a: &[Scalar],
-    transcript: &mut Transcript,
+    transcript: &mut PoseidonTranscript,
     Gamma: &GroupElement,
     G: &[GroupElement],
   ) -> Result<(GroupElement, GroupElement, Scalar), ProofVerifyError> {
@@ -225,8 +248,16 @@ impl BulletReductionProof {
       u_sq
         .iter()
         .chain(u_inv_sq.iter())
-        .chain(iter::once(&Scalar::one())).map(|s| *s).collect::<Vec<Scalar>>().as_slice(),
-      Ls.iter().chain(Rs.iter()).chain(iter::once(Gamma)).map(|p| *p).collect::<Vec<GroupElement>>().as_slice(),
+        .chain(iter::once(&Scalar::one()))
+        .map(|s| *s)
+        .collect::<Vec<Scalar>>()
+        .as_slice(),
+      Ls.iter()
+        .chain(Rs.iter())
+        .chain(iter::once(Gamma))
+        .map(|p| *p)
+        .collect::<Vec<GroupElement>>()
+        .as_slice(),
     );
 
     Ok((G_hat, Gamma_hat, a_hat))

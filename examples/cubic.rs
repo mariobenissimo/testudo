@@ -9,10 +9,14 @@
 //!
 //! [here]: https://medium.com/@VitalikButerin/quadratic-arithmetic-programs-from-zero-to-hero-f6d558cea649
 use ark_bls12_377::Fr as Scalar;
-use ark_ff::{PrimeField, BigInteger};
-use libspartan::{InputsAssignment, Instance, SNARKGens, VarsAssignment, SNARK};
+use ark_ff::{BigInteger, PrimeField};
+use ark_std::{One, UniformRand, Zero};
+use libspartan::{
+  parameters::poseidon_params,
+  poseidon_transcript::{self, PoseidonTranscript},
+  InputsAssignment, Instance, SNARKGens, VarsAssignment, SNARK,
+};
 use merlin::Transcript;
-use ark_std::{UniformRand, One, Zero};
 
 #[allow(non_snake_case)]
 fn produce_r1cs() -> (
@@ -72,7 +76,7 @@ fn produce_r1cs() -> (
   let inst = Instance::new(num_cons, num_vars, num_inputs, &A, &B, &C).unwrap();
 
   // compute a satisfying assignment
-let mut rng = ark_std::rand::thread_rng();
+  let mut rng = ark_std::rand::thread_rng();
   let z0 = Scalar::rand(&mut rng);
   let z1 = z0 * z0; // constraint 0
   let z2 = z1 * z0; // constraint 1
@@ -119,6 +123,8 @@ fn main() {
     assignment_inputs,
   ) = produce_r1cs();
 
+  let params = poseidon_params();
+
   // produce public parameters
   let gens = SNARKGens::new(num_cons, num_vars, num_inputs, num_non_zero_entries);
 
@@ -126,7 +132,7 @@ fn main() {
   let (comm, decomm) = SNARK::encode(&inst, &gens);
 
   // produce a proof of satisfiability
-  let mut prover_transcript = Transcript::new(b"snark_example");
+  let mut prover_transcript = PoseidonTranscript::new(&params);
   let proof = SNARK::prove(
     &inst,
     &comm,
@@ -138,7 +144,7 @@ fn main() {
   );
 
   // verify the proof of satisfiability
-  let mut verifier_transcript = Transcript::new(b"snark_example");
+  let mut verifier_transcript = PoseidonTranscript::new(&params);
   assert!(proof
     .verify(&comm, &assignment_inputs, &mut verifier_transcript, &gens)
     .is_ok());

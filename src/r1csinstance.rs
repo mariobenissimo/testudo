@@ -1,3 +1,4 @@
+use crate::poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
 use crate::transcript::AppendToTranscript;
 
 use super::dense_mlpoly::DensePolynomial;
@@ -10,10 +11,10 @@ use super::sparse_mlpoly::{
   SparseMatPolyCommitmentGens, SparseMatPolyEvalProof, SparseMatPolynomial,
 };
 use super::timer::Timer;
-use merlin::Transcript;
+use ark_ff::Field;
 use ark_serialize::*;
-use ark_std::{One, Zero, UniformRand};
-use ark_ff::{Field};
+use ark_std::{One, UniformRand, Zero};
+use merlin::Transcript;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct R1CSInstance {
@@ -30,6 +31,14 @@ impl AppendToTranscript for R1CSInstance {
     let mut bytes = Vec::new();
     self.serialize(&mut bytes).unwrap();
     transcript.append_message(b"R1CSInstance", &bytes);
+  }
+}
+
+impl AppendToPoseidon for R1CSInstance {
+  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
+    let mut bytes = Vec::new();
+    self.serialize(&mut bytes).unwrap();
+    transcript.absorb_bytes(&bytes);
   }
 }
 
@@ -68,6 +77,15 @@ impl AppendToTranscript for R1CSCommitment {
     transcript.append_u64(b"num_vars", self.num_vars as u64);
     transcript.append_u64(b"num_inputs", self.num_inputs as u64);
     self.comm.append_to_transcript(b"comm", transcript);
+  }
+}
+
+impl AppendToPoseidon for R1CSCommitment {
+  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
+    transcript.append_u64(self.num_cons as u64);
+    transcript.append_u64(self.num_vars as u64);
+    transcript.append_u64(self.num_inputs as u64);
+    self.comm.append_to_poseidon(transcript);
   }
 }
 
@@ -163,7 +181,7 @@ impl R1CSInstance {
     Timer::print(&format!("number_of_variables {}", num_vars));
     Timer::print(&format!("number_of_inputs {}", num_inputs));
 
-  let mut rng = ark_std::rand::thread_rng();
+    let mut rng = ark_std::rand::thread_rng();
 
     // assert num_cons and num_vars are power of 2
     assert_eq!((num_cons.log2() as usize).pow2(), num_cons);
@@ -330,7 +348,7 @@ impl R1CSEvalProof {
     ry: &[Scalar],
     evals: &(Scalar, Scalar, Scalar),
     gens: &R1CSCommitmentGens,
-    transcript: &mut Transcript,
+    transcript: &mut PoseidonTranscript,
     random_tape: &mut RandomTape,
   ) -> R1CSEvalProof {
     let timer = Timer::new("R1CSEvalProof::prove");
@@ -355,7 +373,7 @@ impl R1CSEvalProof {
     ry: &[Scalar],
     evals: &(Scalar, Scalar, Scalar),
     gens: &R1CSCommitmentGens,
-    transcript: &mut Transcript,
+    transcript: &mut PoseidonTranscript,
   ) -> Result<(), ProofVerifyError> {
     self.proof.verify(
       &comm.comm,
