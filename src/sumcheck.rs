@@ -14,6 +14,7 @@ use super::random::RandomTape;
 use super::scalar::Scalar;
 use super::transcript::{AppendToTranscript, ProofTranscript};
 use super::unipoly::{CompressedUniPoly, UniPoly};
+use ark_bls12_377::constraints::PairingVar;
 use ark_ff::{One, Zero};
 use ark_serialize::*;
 use core::iter;

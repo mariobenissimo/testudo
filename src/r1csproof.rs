@@ -303,7 +303,7 @@ impl R1CSProof {
     let scalar = r_A * eval_A_r + r_B * eval_B_r + r_C * eval_C_r;
     let expected_claim_post_phase2 = eval_Z_at_ry * scalar;
 
-    assert_eq!(expected_claim_post_phase2, claim_post_phase2);
+    assert_eq!(claim_post_phase2, expected_claim_post_phase2);
 
     Ok((rx, ry))
   }
@@ -399,7 +399,7 @@ mod tests {
 
     let params = poseidon_params();
     let mut random_tape = RandomTape::new(b"proof");
-    // let mut prover_transcript = PoseidonTranscript::new(&params);
+
     let mut prover_transcript = PoseidonTranscript::new(&params);
     let (proof, rx, ry) = R1CSProof::prove(
       &inst,
@@ -412,7 +412,6 @@ mod tests {
 
     let inst_evals = inst.evaluate(&rx, &ry);
 
-    // let mut verifier_transcript = PoseidonTranscript::new(&params);
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
       .verify(

@@ -4,6 +4,7 @@ use ark_ff::PrimeField;
 use lazy_static::lazy_static;
 
 use super::scalar::Scalar;
+use ark_bls12_377::Bls12_377;
 use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_serialize::*;
 use core::borrow::Borrow;
