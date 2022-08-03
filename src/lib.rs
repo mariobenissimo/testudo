@@ -37,9 +37,9 @@ mod timer;
 mod transcript;
 mod unipoly;
 
-/// TODO
 pub mod parameters;
-/// TODO
+
+mod constraints;
 pub mod poseidon_transcript;
 
 use ark_ff::{BigInteger, Field, PrimeField};
@@ -127,7 +127,7 @@ pub type VarsAssignment = Assignment;
 pub type InputsAssignment = Assignment;
 
 /// `Instance` holds the description of R1CS matrices
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Instance {
   inst: R1CSInstance,
 }
@@ -383,9 +383,9 @@ impl SNARK {
           &inst.inst,
           padded_vars.assignment,
           &inputs.assignment,
-          &gens.gens_r1cs_sat,
+          // &gens.gens_r1cs_sat,
           transcript,
-          &mut random_tape,
+          // &mut random_tape,
         )
       };
 
@@ -449,38 +449,40 @@ impl SNARK {
 
     let timer_sat_proof = Timer::new("verify_sat_proof");
     assert_eq!(input.assignment.len(), comm.comm.get_num_inputs());
-    let (rx, ry) = self.r1cs_sat_proof.verify(
+    // let (rx, ry) =
+    self.r1cs_sat_proof.verify(
       comm.comm.get_num_vars(),
       comm.comm.get_num_cons(),
       &input.assignment,
       &self.inst_evals,
       transcript,
-      &gens.gens_r1cs_sat,
+      // &gens.gens_r1cs_sat,
     )?;
     timer_sat_proof.stop();
 
-    let timer_eval_proof = Timer::new("verify_eval_proof");
-    let (Ar, Br, Cr) = &self.inst_evals;
-    // Ar.append_to_transcript(b"Ar_claim", transcript);
-    // Br.append_to_transcript(b"Br_claim", transcript);
-    // Cr.append_to_transcript(b"Cr_claim", transcript);
-    transcript.append_scalar(&Ar);
-    transcript.append_scalar(&Br);
-    transcript.append_scalar(&Cr);
-    self.r1cs_eval_proof.verify(
-      &comm.comm,
-      &rx,
-      &ry,
-      &self.inst_evals,
-      &gens.gens_r1cs_eval,
-      transcript,
-    )?;
-    timer_eval_proof.stop();
-    timer_verify.stop();
+    // let timer_eval_proof = Timer::new("verify_eval_proof");
+    // let (Ar, Br, Cr) = &self.inst_evals;
+    // // Ar.append_to_transcript(b"Ar_claim", transcript);
+    // // Br.append_to_transcript(b"Br_claim", transcript);
+    // // Cr.append_to_transcript(b"Cr_claim", transcript);
+    // transcript.append_scalar(&Ar);
+    // transcript.append_scalar(&Br);
+    // transcript.append_scalar(&Cr);
+    // self.r1cs_eval_proof.verify(
+    //   &comm.comm,
+    //   &rx,
+    //   &ry,
+    //   &self.inst_evals,
+    //   &gens.gens_r1cs_eval,
+    //   transcript,
+    // )?;
+    // timer_eval_proof.stop();
+    // timer_verify.stop();
     Ok(())
   }
 }
 
+#[derive(Clone)]
 /// `NIZKGens` holds public parameters for producing and verifying proofs with the Spartan NIZK
 pub struct NIZKGens {
   gens_r1cs_sat: R1CSGens,
@@ -519,7 +521,7 @@ impl NIZK {
     inst: &Instance,
     vars: VarsAssignment,
     input: &InputsAssignment,
-    gens: &NIZKGens,
+    // gens: &NIZKGens,
     transcript: &mut PoseidonTranscript,
   ) -> Self {
     let timer_prove = Timer::new("NIZK::prove");
@@ -546,9 +548,9 @@ impl NIZK {
         &inst.inst,
         padded_vars.assignment,
         &input.assignment,
-        &gens.gens_r1cs_sat,
+        // &gens.gens_r1cs_sat,
         transcript,
-        &mut random_tape,
+        // &mut random_tape,
       );
       let mut proof_encoded = Vec::new();
       proof.serialize(&mut proof_encoded).unwrap();
@@ -569,8 +571,8 @@ impl NIZK {
     inst: &Instance,
     input: &InputsAssignment,
     transcript: &mut PoseidonTranscript,
-    gens: &NIZKGens,
-  ) -> Result<(), ProofVerifyError> {
+    // gens: &NIZKGens,
+  ) -> Result<(usize), ProofVerifyError> {
     let timer_verify = Timer::new("NIZK::verify");
 
     // transcript.append_protocol_name(NIZK::protocol_name());
@@ -585,22 +587,62 @@ impl NIZK {
 
     let timer_sat_proof = Timer::new("verify_sat_proof");
     assert_eq!(input.assignment.len(), inst.inst.get_num_inputs());
-    let (rx, ry) = self.r1cs_sat_proof.verify(
+    // let (rx, ry) =
+    let nc = self.r1cs_sat_proof.verify(
       inst.inst.get_num_vars(),
       inst.inst.get_num_cons(),
       &input.assignment,
       &inst_evals,
       transcript,
-      &gens.gens_r1cs_sat,
+      // &gens.gens_r1cs_sat,
     )?;
 
     // verify if claimed rx and ry are correct
-    assert_eq!(rx, *claimed_rx);
-    assert_eq!(ry, *claimed_ry);
+    // assert_eq!(rx, *claimed_rx);
+    // assert_eq!(ry, *claimed_ry);
     timer_sat_proof.stop();
     timer_verify.stop();
 
-    Ok(())
+    Ok((nc))
+  }
+
+  pub fn verify_groth16(
+    &self,
+    inst: &Instance,
+    input: &InputsAssignment,
+    transcript: &mut PoseidonTranscript,
+  ) -> Result<(u128, u128, u128), ProofVerifyError> {
+    let timer_verify = Timer::new("NIZK::verify");
+
+    // transcript.append_protocol_name(NIZK::protocol_name());
+    inst.inst.append_to_poseidon(transcript);
+
+    // We send evaluations of A, B, C at r = (rx, ry) as claims
+    // to enable the verifier complete the first sum-check
+    let timer_eval = Timer::new("eval_sparse_polys");
+    let (claimed_rx, claimed_ry) = &self.r;
+    let inst_evals = inst.inst.evaluate(claimed_rx, claimed_ry);
+    timer_eval.stop();
+
+    let timer_sat_proof = Timer::new("verify_sat_proof");
+    assert_eq!(input.assignment.len(), inst.inst.get_num_inputs());
+    // let (rx, ry) =
+    let (ds, dp, dv) = self.r1cs_sat_proof.verify_groth16(
+      inst.inst.get_num_vars(),
+      inst.inst.get_num_cons(),
+      &input.assignment,
+      &inst_evals,
+      transcript,
+      // &gens.gens_r1cs_sat,
+    )?;
+
+    // verify if claimed rx and ry are correct
+    // assert_eq!(rx, *claimed_rx);
+    // assert_eq!(ry, *claimed_ry);
+    timer_sat_proof.stop();
+    timer_verify.stop();
+
+    Ok((ds, dp, dv))
   }
 }
 
@@ -771,14 +813,14 @@ mod tests {
       &inst,
       assignment_vars,
       &assignment_inputs,
-      &gens,
+      // &gens,
       &mut prover_transcript,
     );
 
     // verify the NIZK
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
-      .verify(&inst, &assignment_inputs, &mut verifier_transcript, &gens)
+      .verify(&inst, &assignment_inputs, &mut verifier_transcript)
       .is_ok());
   }
 }

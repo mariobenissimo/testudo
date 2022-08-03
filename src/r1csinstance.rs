@@ -16,7 +16,7 @@ use ark_serialize::*;
 use ark_std::{One, UniformRand, Zero};
 use merlin::Transcript;
 
-#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct R1CSInstance {
   num_cons: usize,
   num_vars: usize,
@@ -55,8 +55,8 @@ impl R1CSCommitmentGens {
     num_nz_entries: usize,
   ) -> R1CSCommitmentGens {
     assert!(num_inputs < num_vars);
-    let num_poly_vars_x = num_cons.log2() as usize;
-    let num_poly_vars_y = (2 * num_vars).log2() as usize;
+    let num_poly_vars_x = num_cons.ilog2() as usize;
+    let num_poly_vars_y = (2 * num_vars).ilog2() as usize;
     let gens =
       SparseMatPolyCommitmentGens::new(label, num_poly_vars_x, num_poly_vars_y, num_nz_entries, 3);
     R1CSCommitmentGens { gens }
@@ -133,8 +133,8 @@ impl R1CSInstance {
     assert!(num_inputs < num_vars);
 
     // no errors, so create polynomials
-    let num_poly_vars_x = num_cons.log2() as usize;
-    let num_poly_vars_y = (2 * num_vars).log2() as usize;
+    let num_poly_vars_x = num_cons.ilog2() as usize;
+    let num_poly_vars_y = (2 * num_vars).ilog2() as usize;
 
     let mat_A = (0..A.len())
       .map(|i| SparseMatEntry::new(A[i].0, A[i].1, A[i].2))
@@ -184,8 +184,8 @@ impl R1CSInstance {
     let mut rng = ark_std::rand::thread_rng();
 
     // assert num_cons and num_vars are power of 2
-    assert_eq!((num_cons.log2() as usize).pow2(), num_cons);
-    assert_eq!((num_vars.log2() as usize).pow2(), num_vars);
+    assert_eq!((num_cons.ilog2() as usize).pow2(), num_cons);
+    assert_eq!((num_vars.ilog2() as usize).pow2(), num_vars);
 
     // num_inputs + 1 <= num_vars
     assert!(num_inputs < num_vars);
@@ -232,8 +232,8 @@ impl R1CSInstance {
     Timer::print(&format!("number_non-zero_entries_B {}", B.len()));
     Timer::print(&format!("number_non-zero_entries_C {}", C.len()));
 
-    let num_poly_vars_x = num_cons.log2() as usize;
-    let num_poly_vars_y = (2 * num_vars).log2() as usize;
+    let num_poly_vars_x = num_cons.ilog2() as usize;
+    let num_poly_vars_y = (2 * num_vars).ilog2() as usize;
     let poly_A = SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, A);
     let poly_B = SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, B);
     let poly_C = SparseMatPolynomial::new(num_poly_vars_x, num_poly_vars_y, C);

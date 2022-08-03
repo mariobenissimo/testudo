@@ -9,16 +9,17 @@ use ark_serialize::*;
 use merlin::Transcript;
 // ax^2 + bx + c stored as vec![c,b,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,c,b,a]
-#[derive(Debug)]
+#[derive(Debug, CanonicalDeserialize, CanonicalSerialize, Clone)]
 pub struct UniPoly {
-  coeffs: Vec<Scalar>,
+  pub coeffs: Vec<Scalar>,
+  // pub coeffs_fq: Vec<Fq>,
 }
 
 // ax^2 + bx + c stored as vec![c,a]
 // ax^3 + bx^2 + cx + d stored as vec![d,b,a]
 #[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
 pub struct CompressedUniPoly {
-  coeffs_except_linear_term: Vec<Scalar>,
+  pub coeffs_except_linear_term: Vec<Scalar>,
 }
 
 impl UniPoly {

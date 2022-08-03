@@ -258,3 +258,7 @@ pub fn poseidon_params() -> PoseidonParameters<Fq> {
     arks,
   )
 }
+
+lazy_static! {
+  pub static ref POSEIDON_PARAMETERS_377: PoseidonParameters<Fq> = poseidon_params();
+}

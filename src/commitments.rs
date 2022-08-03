@@ -12,7 +12,7 @@ use sha3::Shake256;
 use std::io::Read;
 use std::str::FromStr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MultiCommitGens {
   pub n: usize,
   pub G: Vec<GroupElement>,

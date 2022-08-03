@@ -34,7 +34,7 @@ pub fn main() {
     let params = poseidon_params();
     // produce a proof of satisfiability
     let mut prover_transcript = PoseidonTranscript::new(&params);
-    let proof = NIZK::prove(&inst, vars, &inputs, &gens, &mut prover_transcript);
+    let proof = NIZK::prove(&inst, vars, &inputs, &mut prover_transcript);
 
     let mut proof_encoded = Vec::new();
     proof.serialize(&mut proof_encoded).unwrap();
@@ -44,7 +44,7 @@ pub fn main() {
     // verify the proof of satisfiability
     let mut verifier_transcript = PoseidonTranscript::new(&params);
     assert!(proof
-      .verify(&inst, &inputs, &mut verifier_transcript, &gens)
+      .verify(&inst, &inputs, &mut verifier_transcript)
       .is_ok());
 
     println!();

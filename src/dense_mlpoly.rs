@@ -27,6 +27,7 @@ pub struct DensePolynomial {
   Z: Vec<Scalar>, // evaluations of the polynomial in all the 2^num_vars Boolean inputs
 }
 
+#[derive(Clone)]
 pub struct PolyCommitmentGens {
   pub gens: DotProductProofGens,
 }
@@ -124,7 +125,7 @@ impl IdentityPolynomial {
 impl DensePolynomial {
   pub fn new(Z: Vec<Scalar>) -> Self {
     DensePolynomial {
-      num_vars: Z.len().log2() as usize,
+      num_vars: Z.len().ilog2() as usize,
       len: Z.len(),
       Z,
     }
