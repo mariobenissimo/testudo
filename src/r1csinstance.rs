@@ -14,7 +14,9 @@ use super::timer::Timer;
 use ark_ff::Field;
 use ark_serialize::*;
 use ark_std::{One, UniformRand, Zero};
+use digest::{ExtendableOutput, Input};
 use merlin::Transcript;
+use sha3::Shake256;
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct R1CSInstance {
@@ -24,22 +26,6 @@ pub struct R1CSInstance {
   A: SparseMatPolynomial,
   B: SparseMatPolynomial,
   C: SparseMatPolynomial,
-}
-
-impl AppendToTranscript for R1CSInstance {
-  fn append_to_transcript(&self, _label: &'static [u8], transcript: &mut Transcript) {
-    let mut bytes = Vec::new();
-    self.serialize(&mut bytes).unwrap();
-    transcript.append_message(b"R1CSInstance", &bytes);
-  }
-}
-
-impl AppendToPoseidon for R1CSInstance {
-  fn append_to_poseidon(&self, transcript: &mut PoseidonTranscript) {
-    let mut bytes = Vec::new();
-    self.serialize(&mut bytes).unwrap();
-    transcript.absorb_bytes(&bytes);
-  }
 }
 
 pub struct R1CSCommitmentGens {
@@ -170,6 +156,17 @@ impl R1CSInstance {
 
   pub fn get_num_inputs(&self) -> usize {
     self.num_inputs
+  }
+
+  pub fn get_digest(&self) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    self.serialize(&mut bytes).unwrap();
+    let mut shake = Shake256::default();
+    shake.input(bytes);
+    let mut reader = shake.xof_result();
+    let mut buf = [0u8; 256];
+    reader.read(&mut buf).unwrap();
+    buf.to_vec()
   }
 
   pub fn produce_synthetic_r1cs(

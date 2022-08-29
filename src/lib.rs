@@ -130,6 +130,7 @@ pub type InputsAssignment = Assignment;
 #[derive(Debug, Clone)]
 pub struct Instance {
   inst: R1CSInstance,
+  digest: Vec<u8>,
 }
 
 impl Instance {
@@ -237,7 +238,9 @@ impl Instance {
       &C_scalar.unwrap(),
     );
 
-    Ok(Instance { inst })
+    let digest = inst.get_digest();
+
+    Ok(Instance { inst, digest })
   }
 
   /// Checks if a given R1CSInstance is satisfiable with a given variables and inputs assignments
@@ -279,8 +282,9 @@ impl Instance {
     num_inputs: usize,
   ) -> (Instance, VarsAssignment, InputsAssignment) {
     let (inst, vars, inputs) = R1CSInstance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
+    let digest = inst.get_digest();
     (
-      Instance { inst },
+      Instance { inst, digest },
       VarsAssignment { assignment: vars },
       InputsAssignment { assignment: inputs },
     )
@@ -530,7 +534,7 @@ impl NIZK {
     let mut random_tape = RandomTape::new(b"proof");
 
     // transcript.append_protocol_name(NIZK::protocol_name());
-    inst.inst.append_to_poseidon(transcript);
+    transcript.absorb_bytes(&inst.digest);
 
     let (r1cs_sat_proof, rx, ry) = {
       // we might need to pad variables
@@ -576,7 +580,7 @@ impl NIZK {
     let timer_verify = Timer::new("NIZK::verify");
 
     // transcript.append_protocol_name(NIZK::protocol_name());
-    inst.inst.append_to_poseidon(transcript);
+    transcript.absorb_bytes(&inst.digest);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check
@@ -615,7 +619,7 @@ impl NIZK {
     let timer_verify = Timer::new("NIZK::verify");
 
     // transcript.append_protocol_name(NIZK::protocol_name());
-    inst.inst.append_to_poseidon(transcript);
+    transcript.absorb_bytes(&inst.digest);
 
     // We send evaluations of A, B, C at r = (rx, ry) as claims
     // to enable the verifier complete the first sum-check

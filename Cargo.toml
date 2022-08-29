@@ -50,7 +50,6 @@ tracing-subscriber = { version = "0.2" }
 
 
 [dev-dependencies]
-criterion = "0.3.1"
 serde = { version = "1.0", features = ["derive"] }
 csv = "1.1.5"
 
@@ -74,8 +73,7 @@ debug = true
 [features]
 multicore = ["rayon"]
 profile = []
-default = ["asm", "parallel", "std"]
-asm = ["ark-ff/asm"]
+default = ["parallel", "std"]
 parallel = [ "std", "ark-ff/parallel", "ark-std/parallel", "ark-ec/parallel"]
 std = ["ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std", "ark-serialize/std"]
 
