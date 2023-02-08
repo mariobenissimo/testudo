@@ -1583,7 +1583,7 @@ impl SparsePolyEntry {
     SparsePolyEntry { idx, val }
   }
 }
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct SparsePolynomial {
   pub num_vars: usize,
   pub Z: Vec<SparsePolyEntry>,

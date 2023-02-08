@@ -49,6 +49,7 @@ use ark_serialize::*;
 use ark_std::Zero;
 use core::cmp::max;
 use errors::{ProofVerifyError, R1CSError};
+use parameters::poseidon_params;
 
 use poseidon_transcript::{AppendToPoseidon, PoseidonTranscript};
 use r1csinstance::{
@@ -310,7 +311,7 @@ impl SNARKGens {
       num_vars_padded
     };
 
-    let gens_r1cs_sat = R1CSGens::new(b"gens_r1cs_sat", num_cons, num_vars_padded);
+    let gens_r1cs_sat = R1CSGens::new(b"gens_r1cs_sat", num_cons, num_vars_padded, num_inputs);
     let gens_r1cs_eval = R1CSCommitmentGens::new(
       b"gens_r1cs_eval",
       num_cons,
@@ -523,7 +524,7 @@ impl NIZKGens {
       num_vars_padded
     };
 
-    let gens_r1cs_sat = R1CSGens::new(b"gens_r1cs_sat", num_cons, num_vars_padded);
+    let gens_r1cs_sat = R1CSGens::new(b"gens_r1cs_sat", num_cons, num_vars_padded, num_inputs);
     NIZKGens { gens_r1cs_sat }
   }
 }
@@ -555,6 +556,7 @@ impl NIZK {
 
     // transcript.append_protocol_name(NIZK::protocol_name());
     transcript.append_bytes(&inst.digest);
+    let c = transcript.challenge_scalar();
 
     let (r1cs_sat_proof, rx, ry) = {
       // we might need to pad variables
@@ -568,14 +570,19 @@ impl NIZK {
         }
       };
 
+      let mut prover_transcript = PoseidonTranscript::new(&poseidon_params());
+      prover_transcript.append_scalar(&c);
       let (proof, rx, ry) = R1CSProof::prove(
         &inst.inst,
         padded_vars.assignment,
         &input.assignment,
         &gens.gens_r1cs_sat,
-        transcript,
-        // &mut random_tape,
+        &mut prover_transcript,
       );
+
+      let mut circuit_verifier_transcript = PoseidonTranscript::new(&poseidon_params());
+      circuit_verifier_transcript.append_scalar(&c);
+      proof.prove_circuit(inst, vars, input, gens, &mut circuit_verifier_transcript);
       let mut proof_encoded = Vec::new();
       proof
         .serialize_with_mode(&mut proof_encoded, Compress::Yes)
@@ -777,14 +784,18 @@ mod tests {
 
     // Create a^2 + b + 13
     A.push((0, num_vars + 2, (Scalar::one().into_bigint().to_bytes_le()))); // 1*a
-    B.push((0, num_vars + 2, Scalar::one().into_bigint().to_bytes_le()));// 1*a
+    B.push((0, num_vars + 2, Scalar::one().into_bigint().to_bytes_le())); // 1*a
     C.push((0, num_vars + 1, Scalar::one().into_bigint().to_bytes_le())); // 1*z
     C.push((
       0,
       num_vars,
       (-Scalar::from(13u64)).into_bigint().to_bytes_le(),
     )); // -13*1
-    C.push((0, num_vars + 3, (-Scalar::one()).into_bigint().to_bytes_le())); // -1*b
+    C.push((
+      0,
+      num_vars + 3,
+      (-Scalar::one()).into_bigint().to_bytes_le(),
+    )); // -1*b
 
     // Var Assignments (Z_0 = 16 is the only output)
     let vars = vec![Scalar::zero().into_bigint().to_bytes_le(); num_vars];

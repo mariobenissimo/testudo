@@ -128,7 +128,7 @@ impl UniPolyVar {
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct SumcheckVerificationCircuit {
   pub polys: Vec<UniPoly>,
 }

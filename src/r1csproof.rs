@@ -1,7 +1,8 @@
 #![allow(clippy::too_many_arguments)]
 use super::dense_mlpoly::{DensePolynomial, EqPolynomial, PolyCommitmentGens};
 use super::errors::ProofVerifyError;
-use crate::constraints::{R1CSVerificationCircuit, VerifierConfig};
+use crate::ark_std::UniformRand;
+use crate::constraints::{R1CSVerificationCircuit, SumcheckVerificationCircuit, VerifierConfig};
 use crate::group::{Fq, Fr};
 use crate::math::Math;
 use crate::mipp::MippProof;
@@ -9,11 +10,13 @@ use crate::parameters::poseidon_params;
 use crate::poseidon_transcript::PoseidonTranscript;
 use crate::sqrt_pst::Polynomial;
 use crate::sumcheck::SumcheckInstanceProof;
+use crate::unipoly::UniPoly;
 use ark_bls12_377::Bls12_377 as I;
 use ark_bw6_761::BW6_761 as P;
 use ark_ec::pairing::Pairing;
 
 use ark_poly_commit::multilinear_pc::data_structures::{Commitment, Proof};
+use itertools::Itertools;
 
 use super::r1csinstance::R1CSInstance;
 
@@ -22,7 +25,7 @@ use super::sparse_mlpoly::{SparsePolyEntry, SparsePolynomial};
 use super::timer::Timer;
 use ark_snark::{CircuitSpecificSetupSNARK, SNARK};
 
-use ark_groth16::Groth16;
+use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
 use ark_serialize::*;
 use ark_std::{One, Zero};
@@ -47,15 +50,86 @@ pub struct R1CSProof {
 }
 
 #[derive(Clone)]
+pub struct CircuitGens {
+  pub pk: ProvingKey<I>,
+  pub vk: VerifyingKey<I>,
+}
+
+impl CircuitGens {
+  pub fn new(num_cons: usize, num_vars: usize, num_inputs: usize) -> Self {
+    let mut rng = rand::thread_rng();
+
+    let uni_polys_round1 = (0..num_cons.log_2())
+      .map(|i| {
+        UniPoly::from_evals(&[
+          Scalar::rand(&mut rng),
+          Scalar::rand(&mut rng),
+          Scalar::rand(&mut rng),
+          Scalar::rand(&mut rng),
+        ])
+      })
+      .collect::<Vec<UniPoly>>();
+
+    let uni_polys_round2 = (0..num_vars.log_2() + 1)
+      .map(|i| {
+        UniPoly::from_evals(&[
+          Scalar::rand(&mut rng),
+          Scalar::rand(&mut rng),
+          Scalar::rand(&mut rng),
+        ])
+      })
+      .collect::<Vec<UniPoly>>();
+
+    let circuit = R1CSVerificationCircuit {
+      num_vars: num_vars,
+      num_cons: num_cons,
+      input: (0..num_inputs)
+        .map(|i| Scalar::rand(&mut rng))
+        .collect_vec(),
+      input_as_sparse_poly: SparsePolynomial::new(
+        num_vars.log_2(),
+        (0..num_inputs + 1)
+          .map(|i| SparsePolyEntry::new(i, Scalar::rand(&mut rng)))
+          .collect::<Vec<SparsePolyEntry>>(),
+      ),
+      evals: (Scalar::zero(), Scalar::zero(), Scalar::zero()),
+      params: poseidon_params(),
+      prev_challenge: Scalar::zero(),
+      claims_phase2: (
+        Scalar::zero(),
+        Scalar::zero(),
+        Scalar::zero(),
+        Scalar::zero(),
+      ),
+      eval_vars_at_ry: Scalar::zero(),
+      sc_phase1: SumcheckVerificationCircuit {
+        polys: uni_polys_round1,
+      },
+      sc_phase2: SumcheckVerificationCircuit {
+        polys: uni_polys_round2,
+      },
+      claimed_ry: (0..num_vars.log_2() + 1)
+        .map(|i| Scalar::rand(&mut rng))
+        .collect_vec(),
+      claimed_transcript_sat_state: Scalar::zero(),
+    };
+    let (pk, vk) = Groth16::<I>::setup(circuit.clone(), &mut rng).unwrap();
+    CircuitGens { pk, vk }
+  }
+}
+
+#[derive(Clone)]
 pub struct R1CSGens {
   gens_pc: PolyCommitmentGens,
+  gens_gc: CircuitGens,
 }
 
 impl R1CSGens {
-  pub fn new(label: &'static [u8], _num_cons: usize, num_vars: usize) -> Self {
+  pub fn new(label: &'static [u8], num_cons: usize, num_vars: usize, num_inputs: usize) -> Self {
     let num_poly_vars = num_vars.log_2();
+    let gens_gc = CircuitGens::new(num_cons, num_vars, num_inputs);
     let gens_pc = PolyCommitmentGens::new(num_poly_vars, label);
-    R1CSGens { gens_pc }
+    R1CSGens { gens_pc, gens_gc }
   }
 }
 
@@ -253,7 +327,7 @@ impl R1CSProof {
     )
   }
 
-  pub fn verify_groth16(
+  pub fn prove_circuit(
     &self,
     num_vars: usize,
     num_cons: usize,
@@ -261,7 +335,7 @@ impl R1CSProof {
     evals: &(Scalar, Scalar, Scalar),
     transcript: &mut PoseidonTranscript,
     gens: &R1CSGens,
-  ) -> Result<(u128, u128, u128), ProofVerifyError> {
+  ) {
     // serialise and add the IPP commitment to the transcript
     let mut bytes = Vec::new();
     self
@@ -300,27 +374,29 @@ impl R1CSProof {
       ry: self.ry.clone(),
       transcript_sat_state: self.transcript_sat_state,
     };
-
     let circuit = R1CSVerificationCircuit::new(&config);
 
-    // this is universal, we don't measure it
-    let start = Instant::now();
-    let (pk, vk) = Groth16::<I>::setup(circuit.clone(), &mut rand::thread_rng()).unwrap();
-    let ds = start.elapsed().as_millis();
-
     let prove_outer = Timer::new("provecircuit");
-    let start = Instant::now();
-    let proof = Groth16::<I>::prove(&pk, circuit, &mut rand::thread_rng()).unwrap();
-    let dp = start.elapsed().as_millis();
+    let proof = Groth16::<I>::prove(&gens.gens_gc.pk, circuit, &mut rand::thread_rng()).unwrap();
     prove_outer.stop();
+  }
 
+  pub fn verify_groth16(
+    &self,
+    num_vars: usize,
+    num_cons: usize,
+    input: &[Scalar],
+    evals: &(Scalar, Scalar, Scalar),
+    transcript: &mut PoseidonTranscript,
+    gens: &R1CSGens,
+  ) -> Result<(u128, u128, u128), ProofVerifyError> {
     let start = Instant::now();
     let verifier_time = Timer::new("groth16_verification");
     let (v_A, v_B, v_C, v_AB) = self.claims_phase2;
     let mut pubs = vec![];
     pubs.extend(self.ry.clone());
     pubs.extend(vec![self.eval_vars_at_ry, self.transcript_sat_state]);
-    let is_verified = Groth16::<I>::verify(&vk, &pubs, &proof).unwrap();
+    let is_verified = Groth16::<I>::verify(&gens.gens_gc.vk, &pubs, &proof).unwrap();
     assert!(is_verified);
     verifier_time.stop();
 
@@ -344,7 +420,7 @@ impl R1CSProof {
     assert!(res == true);
     let dv = start.elapsed().as_millis();
 
-    Ok((ds, dp, dv))
+    Ok((dp, dp, dv))
   }
 
   // Helper function to find the number of constraint in the circuit which
@@ -505,12 +581,12 @@ mod tests {
 
   #[test]
   pub fn check_r1cs_proof() {
-    let num_vars = 16;
+    let num_vars = 1024;
     let num_cons = num_vars;
     let num_inputs = 3;
     let (inst, vars, input) = R1CSInstance::produce_synthetic_r1cs(num_cons, num_vars, num_inputs);
 
-    let gens = R1CSGens::new(b"test-m", num_cons, num_vars);
+    let gens = R1CSGens::new(b"test-m", num_cons, num_vars, num_inputs);
 
     let params = poseidon_params();
     // let mut random_tape = RandomTape::new(b"proof");
