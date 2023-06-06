@@ -21,6 +21,8 @@ fn main() {
   let n = 10;
   let nconstraints = (2_usize).pow(n as u32);
   let mut res = BenchmarkResults::default();
+  res.power = n;
+  res.input_constraints = nconstraints;
   groth16_bench::<ark_bls12_377::Bls12_377>(nconstraints, &mut res);
   let mut writer = csv::Writer::from_path("groth16.csv").expect("unable to open csv writer");
   writer
