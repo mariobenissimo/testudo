@@ -67,6 +67,10 @@ harness = false
 name = "commitment"
 harness = false
 
+[[bench]]
+name = "groth16"
+harness = false
+
 [features]
 multicore = ["rayon"]
 profile = []
