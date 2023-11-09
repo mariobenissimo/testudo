@@ -538,6 +538,8 @@ where
     IV::G1Var: CurveVar<E::G1, E::BaseField>,
     IV::G2Var: CurveVar<E::G2, E::BaseField>,
     IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
+    IV::G1Var: AbsorbGadget<E::BaseField>,
+    IV::GTVar: AbsorbGadget<E::BaseField>,
 {
     fn generate_constraints(
         self,
@@ -588,58 +590,29 @@ where
 
       let final_res_var: MippTUVar<E,IV> = MippTUVar {
         tc: T_var.clone(),
-        uc: U_g_product_var,
+        uc: U_g_product_var.clone(),
       };
 
-      // let scalar_in_fq =
-      //         &E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
-      //             p.into_bigint().to_bits_le().as_slice(),
-      //         ))
-      //         .unwrap();
+      let params: PoseidonConfig<E::BaseField> = params_to_base_field::<E>(self.transcript.params);
+      let mut transcript_var = PoseidonSpongeVar::new(cs.clone(), &params);
+      transcript_var.absorb(&U_g_product_var);
 
-      let params: PoseidonConfig<E::BaseField> = params_to_base_field(self.transcript.params);
-      let mut sponge = PoseidonSpongeVar::new(cs.clone(), &params);
-      // let element = params[1][2];
-      // let scalar_in_fq =
-      //         &E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
-      //             element.into_bigint().to_bits_le().as_slice(),
-      //         ))
-      //         .unwrap();
-      // let params2 = vec![];
-      // for inner_vec in &params {
-      //   let p2 = vec![];
-      //   for &element in inner_vec {
-      //       let scalar_in_fq =
-      //         &E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
-      //             element.into_bigint().to_bits_le().as_slice(),
-      //         ))
-      //         .unwrap();
-      //         p2.push(scalar_in_fq);
-      //   }
-      //   params2.push(p2);
-      // }x
-      // self.transcript.params.ark = params2;
-      //let prova = PoseidonConfig::new(1,2,3,vec![vec![scalar_in_fq]],vec![vec![scalar_in_fq]]4,5);
-      // create transcriptVar from transcript
-      // let mut sponge = PoseidonSpongeVar::new(cs.clone(), &params);
-      // let transcript_var: PoseidonTranscripVar2<E,IV> = PoseidonTranscripVar2::new(cs.clone(), &self.transcript);
+      for (i, (comm_u, comm_t)) in comms_u_var.iter().zip(comms_t_var.iter()).enumerate() {
+        let (comm_u_l, comm_u_r) = comm_u;
+        let (comm_t_l, comm_t_r) = comm_t;
+        // Fiat-Shamir challenge
+        transcript_var.absorb(comm_u_l);
+        transcript_var.absorb(comm_u_r);
+        transcript_var.absorb(comm_t_l);
+        transcript_var.absorb(comm_t_r);
+        let c_inv_var = transcript_var.squeeze_field_elements(1).unwrap().remove(0);
+        let c_var = c_inv_var.inverse().unwrap();
 
-      // transcript_var.append(U_g_product_var);
+        xs.push(c_var);
+        xs_inv.push(c_inv_var);
+        
+      }
 
-      // for (i, (comm_u, comm_t)) in comms_u_var.iter().zip(comms_t_var.iter()).enumerate() {
-      //   let (comm_u_l, comm_u_r) = comm_u;
-      //   let (comm_t_l, comm_t_r) = comm_t;
-      //   // Fiat-Shamir challenge
-      //   transcript_var.append(comm_u_l);
-      //   transcript_var.append(comm_u_r);
-      //   transcript_var.append(comm_t_l);
-      //   transcript_var.append(comm_t_r);
-      //   let c_inv_var = transcript_var.challenge()?;
-      //   let c_var = c_inv_var.inverse().unwrap();
-
-      //   xs.push(c_var);
-      //   xs_inv.push(c_inv_var);
-      // } 
       Ok(())
     }
 }
