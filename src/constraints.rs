@@ -1,12 +1,14 @@
 use ark_ec::pairing::Pairing;
 use std::{borrow::Borrow, marker::PhantomData};
 use ark_r1cs_std::prelude::*;
+use crate::parameters::params_to_base_field;
 use crate::{
   math::Math,
   sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
   unipoly::UniPoly,
   poseidon_transcript::PoseidonTranscript,
 };
+use crate::parameters::get_bls12377_fq_params;
 use ark_crypto_primitives::sponge::constraints::AbsorbGadget;
 use crate::ark_std::One;
 use crate::mipp::MippProof;
@@ -43,12 +45,9 @@ where
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
   IV::G1Var: AbsorbGadget<<E as Pairing>::BaseField>,
 {
-  fn new(cs: ConstraintSystemRef<<E as Pairing>::BaseField>, params: &PoseidonConfig<<E as Pairing>::BaseField>) -> Self {
-    let mut sponge = PoseidonSpongeVar::new(cs.clone(), params);
+  fn new(cs: ConstraintSystemRef<<E as Pairing>::BaseField>, t: &PoseidonTranscript<<E as Pairing>::BaseField>) -> Self {
+    let mut sponge = PoseidonSpongeVar::new(cs.clone(), &t.params);
     Self { cs, sponge, _iv: PhantomData}
-  }
-  fn append(&mut self, input: IV::G1Var) -> Result<(), SynthesisError> {
-    self.sponge.absorb(&input)
   }
 }
 pub struct PoseidonTranscripVar<F>
@@ -587,17 +586,60 @@ where
       // start allocate U.g_product
       let U_g_product_var = IV::G1Var::new_input(cs.clone(), || Ok(self.U.g_product))?;
 
-      let final_res_var = MippTUVar {
+      let final_res_var: MippTUVar<E,IV> = MippTUVar {
         tc: T_var.clone(),
         uc: U_g_product_var,
       };
 
-      // create transcriptVar from transcript
-      let params = self.transcript.params;
-      let transcript_var = PoseidonTranscripVar2::new(cs.clone(), &params);
+      // let scalar_in_fq =
+      //         &E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
+      //             p.into_bigint().to_bits_le().as_slice(),
+      //         ))
+      //         .unwrap();
 
-      transcript_var.append(U_g_product_var);
-      
+      let params: PoseidonConfig<E::BaseField> = params_to_base_field(self.transcript.params);
+      let mut sponge = PoseidonSpongeVar::new(cs.clone(), &params);
+      // let element = params[1][2];
+      // let scalar_in_fq =
+      //         &E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
+      //             element.into_bigint().to_bits_le().as_slice(),
+      //         ))
+      //         .unwrap();
+      // let params2 = vec![];
+      // for inner_vec in &params {
+      //   let p2 = vec![];
+      //   for &element in inner_vec {
+      //       let scalar_in_fq =
+      //         &E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
+      //             element.into_bigint().to_bits_le().as_slice(),
+      //         ))
+      //         .unwrap();
+      //         p2.push(scalar_in_fq);
+      //   }
+      //   params2.push(p2);
+      // }x
+      // self.transcript.params.ark = params2;
+      //let prova = PoseidonConfig::new(1,2,3,vec![vec![scalar_in_fq]],vec![vec![scalar_in_fq]]4,5);
+      // create transcriptVar from transcript
+      // let mut sponge = PoseidonSpongeVar::new(cs.clone(), &params);
+      // let transcript_var: PoseidonTranscripVar2<E,IV> = PoseidonTranscripVar2::new(cs.clone(), &self.transcript);
+
+      // transcript_var.append(U_g_product_var);
+
+      // for (i, (comm_u, comm_t)) in comms_u_var.iter().zip(comms_t_var.iter()).enumerate() {
+      //   let (comm_u_l, comm_u_r) = comm_u;
+      //   let (comm_t_l, comm_t_r) = comm_t;
+      //   // Fiat-Shamir challenge
+      //   transcript_var.append(comm_u_l);
+      //   transcript_var.append(comm_u_r);
+      //   transcript_var.append(comm_t_l);
+      //   transcript_var.append(comm_t_r);
+      //   let c_inv_var = transcript_var.challenge()?;
+      //   let c_var = c_inv_var.inverse().unwrap();
+
+      //   xs.push(c_var);
+      //   xs_inv.push(c_inv_var);
+      // } 
       Ok(())
     }
 }
