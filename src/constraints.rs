@@ -1,6 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_r1cs_std::groups::bls12::G1Var;
-
+use ark_poly_commit::multilinear_pc::data_structures::ProofG1;
+use ark_poly_commit::multilinear_pc::data_structures::CommitmentG2;
 use std::ops::MulAssign;
 use std::ops::AddAssign;
 use std::{borrow::Borrow, marker::PhantomData};
@@ -548,6 +549,12 @@ where
     self.uc.add_assign(&other.uc);
   }
 }
+pub struct CommitmentG2Var<E: Pairing, IV: PairingVar<E>> {
+  /// number of variables
+  pub nv: usize,
+  /// product of g as described by the vRAM paper
+  pub h_product: IV::G2Var,
+}
 
 struct TestudoCommVerifier<E, IV>
 where
@@ -622,7 +629,7 @@ where
       // start allocate U.g_product
       let U_g_product_var = IV::G1Var::new_input(cs.clone(), || Ok(self.U.g_product))?;
 
-      let final_res_var: MippTUVar<E,IV> = MippTUVar {
+      let mut final_res_var: MippTUVar<E,IV> = MippTUVar {
         tc: T_var.clone(),
         uc: U_g_product_var.clone(),
       };
@@ -655,7 +662,7 @@ where
         UC(&'a IV::G1Var, &'a FpVar< <E>::BaseField >),
       }
 
-      let res = comms_t_var
+      let res_var = comms_t_var
       .iter()
       .zip(comms_u_var.iter())
       .zip(xs.iter().zip(xs_inv.iter()))
@@ -686,7 +693,55 @@ where
         res
       });
 
+      let ref_final_res_var = &mut final_res_var;
+      ref_final_res_var.merge(&res_var);
 
+      let mut rs: Vec<FpVar<<E>::BaseField>> = Vec::new();
+      let m = xs_inv.len();
+      for _i in 0..m {
+        let r = transcript_var.squeeze_field_elements(1).unwrap().remove(0);
+        rs.push(r);
+      }
+
+      let one_var = FpVar::new_input(cs.clone(), || Ok(E::BaseField::one()))?;
+
+     // let rs_var = rs.clone();
+      let v_var: FpVar<<E as Pairing>::BaseField> = (0..m)
+      .into_iter()
+      .map(|i| one_var.clone() + (&rs[i]).mul(&xs_inv[m - i - 1]) - &rs[i])
+      .fold(one_var.clone(), |acc, x| acc * x);
+
+      let comm_h = CommitmentG2::<E> {
+        nv: m,
+        h_product: self.mipp_proof.final_h,
+      };
+
+      let check_h = check_2_gadget::<E,IV>(cs.clone(), self.vk, &comm_h, &rs,v_var, &self.mipp_proof.pst_proof_h);
       Ok(())
     }
+}
+
+fn check_2_gadget<E: Pairing,IV: PairingVar<E>>(cs: ConstraintSystemRef<E::BaseField>, vk: VerifierKey<E>, commitment: &CommitmentG2<E>, point_var: &Vec<FpVar<<E>::BaseField>>, value_var: FpVar<<E as Pairing>::BaseField>, proof: &ProofG1<E>) -> bool
+where
+IV::G1Var: CurveVar<E::G1, E::BaseField>,
+IV::G2Var: CurveVar<E::G2, E::BaseField>,
+IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
+{
+  let vk_g_var = IV::G1Var::new_input(cs.clone(), || Ok(vk.g)).unwrap();
+  let vk_h_var = IV::G2Var::new_input(cs.clone(), || Ok(vk.h)).unwrap();
+  let mut vk_gmask_var = Vec::new();
+  for g_mask in vk.g_mask_random.clone().into_iter() {
+      let g_mask_var = IV::G1Var::new_input(cs.clone(), || Ok(g_mask)).unwrap();
+      vk_gmask_var.push(g_mask_var);
+  }
+  // allocate commitment
+  let com_g2_prod_var = IV::G2Var::new_input(cs.clone(), || Ok(commitment.h_product)).unwrap();
+
+  let pair_right_op = com_g2_prod_var - (vk_h_var.scalar_mul_le(value_var.to_bits_le().unwrap().iter()).unwrap());
+  let right_prepared = IV::prepare_g2(&pair_right_op).unwrap();
+  let left_prepared = IV::prepare_g1(&vk_g_var).unwrap();
+  let left = IV::pairing(left_prepared, right_prepared).unwrap();
+
+  
+  true
 }
