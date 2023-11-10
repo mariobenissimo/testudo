@@ -2,6 +2,7 @@ use ark_ec::pairing::Pairing;
 use ark_r1cs_std::groups::bls12::G1Var;
 use ark_poly_commit::multilinear_pc::data_structures::ProofG1;
 use ark_poly_commit::multilinear_pc::data_structures::CommitmentG2;
+use digest::generic_array::typenum::True;
 use std::ops::MulAssign;
 use std::ops::AddAssign;
 use std::{borrow::Borrow, marker::PhantomData};
@@ -717,6 +718,40 @@ where
       };
 
       let check_h = check_2_gadget::<E,IV>(cs.clone(), self.vk, &comm_h, &rs,v_var, &self.mipp_proof.pst_proof_h);
+      assert!(check_h == true);
+
+      let final_a_var = IV::G1Var::new_input(cs.clone(), || Ok(self.mipp_proof.final_a))?;
+      let final_u_var = final_a_var.scalar_mul_le(final_y_var.to_bits_le().unwrap().iter()).unwrap();
+
+      let final_h_var = IV::G2Var::new_input(cs.clone(), || Ok(self.mipp_proof.final_h))?;
+
+      let final_u_var_prep = IV::prepare_g1(&final_a_var).unwrap();
+      let final_h_var_prep = IV::prepare_g2(&final_h_var).unwrap();
+
+      let final_t_var = IV::pairing(final_u_var_prep, final_h_var_prep).unwrap();
+      let check_t;
+
+      if () == ref_final_res_var.tc.enforce_equal(&final_t_var).unwrap()
+      {
+        check_t = true;
+      }else{
+        check_t = false;
+      }
+      assert!(check_t == true);
+
+      let check_u;
+      if () == ref_final_res_var.uc.enforce_equal(&final_u_var).unwrap()
+      {
+        check_u = true;
+      }else{
+        check_u = false;
+      }
+      assert!(check_u == true);
+
+      let mut a_rev_var = a_var.to_vec().clone();
+      a_rev_var.reverse();
+
+      // MAKE PST CHECKKK
       Ok(())
     }
 }
@@ -742,6 +777,42 @@ IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
   let left_prepared = IV::prepare_g1(&vk_g_var).unwrap();
   let left = IV::pairing(left_prepared, right_prepared).unwrap();
 
-  
-  true
+  let mut h_mul_var = Vec::new();
+
+  for p in point_var.into_iter() {
+      let x = vk_h_var.scalar_mul_le(p.to_bits_le().unwrap().iter()).unwrap();
+      h_mul_var.push(x);
+  }
+  let h_mask_random = vk.h_mask_random[vk.nv - point_var.len()..].to_vec();
+  let mut h_mask_random_var = Vec::new();
+  for h_mask in h_mask_random.clone().into_iter() {
+    let h_mask_var = IV::G2Var::new_input(cs.clone(), || Ok(h_mask)).unwrap();
+    h_mask_random_var.push(h_mask_var);
+}
+  let pairing_rights_var: Vec<_> = (0..vk.nv)
+            .map(|i| h_mask_random_var[i].clone() - h_mul_var[i].clone()) //.map(|i| vk_gmask_var[i].clone() - g_mul_var[i].clone())
+            .collect();
+  let pairing_rights_var: Vec<IV::G2PreparedVar> = pairing_rights_var
+          .into_iter()
+          .map(|p| IV::prepare_g2(&p).unwrap())
+          .collect();
+  let mut proofs_var = Vec::new();
+  for p in proof.proofs.clone().into_iter() {
+          let proof_var = IV::G1Var::new_input(cs.clone(), || Ok(p)).unwrap();
+          proofs_var.push(proof_var);
+  }
+  let pairing_lefts_var: Vec<IV::G1PreparedVar> = proofs_var
+          .into_iter()
+          .map(|p| IV::prepare_g1(&p).unwrap())
+          .collect();
+
+  let right_ml = IV::miller_loop(&pairing_lefts_var, &pairing_rights_var).unwrap();
+  let right = IV::final_exponentiation(&right_ml).unwrap();
+
+  if () == left.enforce_equal(&right).unwrap()
+  {
+    true
+  }else{
+    false
+  }
 }
