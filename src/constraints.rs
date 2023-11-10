@@ -1,4 +1,8 @@
 use ark_ec::pairing::Pairing;
+use ark_r1cs_std::groups::bls12::G1Var;
+
+use std::ops::MulAssign;
+use std::ops::AddAssign;
 use std::{borrow::Borrow, marker::PhantomData};
 use ark_r1cs_std::prelude::*;
 use crate::parameters::params_to_base_field;
@@ -18,6 +22,7 @@ use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,
   poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig},
 };
+use std::ops::Mul;
 use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
@@ -513,9 +518,37 @@ where
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
   IV::GTVar: FieldVar<E::TargetField, E::BaseField>
 {
-  tc: IV::GTVar,
-  uc: IV::G1Var,
+  pub tc: IV::GTVar,
+  pub uc: IV::G1Var,
 }
+
+impl<E,IV> Default for MippTUVar<E,IV>
+where
+  E: Pairing,
+  IV: PairingVar<E>,
+  IV::G1Var: CurveVar<E::G1, E::BaseField>,
+  IV::GTVar: FieldVar<E::TargetField, E::BaseField>
+{
+  fn default() -> Self {
+    Self {
+      tc: IV::GTVar::one(),
+      uc: IV::G1Var::zero(),
+    }
+  }
+}
+impl<E,IV> MippTUVar<E,IV>
+where
+  E: Pairing,
+  IV: PairingVar<E>,
+  IV::G1Var: CurveVar<E::G1, E::BaseField>,
+  IV::GTVar: FieldVar<E::TargetField, E::BaseField>
+{
+  fn merge(&mut self, other: &Self) {
+    self.tc.mul_assign(&other.tc);
+    self.uc.add_assign(&other.uc);
+  }
+}
+
 struct TestudoCommVerifier<E, IV>
 where
     E: Pairing,
@@ -581,7 +614,8 @@ where
 
       let mut xs = Vec::new();
       let mut xs_inv = Vec::new();
-      let mut final_y = E::ScalarField::one();
+      let mut final_y = E::BaseField::one();
+      let mut final_y_var = FpVar::new_input(cs.clone(), || Ok(E::BaseField::one()))?;
 
       // start allocate T
       let T_var = IV::GTVar::new_input(cs.clone(), || Ok(self.T))?;
@@ -592,6 +626,7 @@ where
         tc: T_var.clone(),
         uc: U_g_product_var.clone(),
       };
+
 
       let params: PoseidonConfig<E::BaseField> = params_to_base_field::<E>(self.transcript.params);
       let mut transcript_var = PoseidonSpongeVar::new(cs.clone(), &params);
@@ -608,10 +643,49 @@ where
         let c_inv_var = transcript_var.squeeze_field_elements(1).unwrap().remove(0);
         let c_var = c_inv_var.inverse().unwrap();
 
-        xs.push(c_var);
-        xs_inv.push(c_inv_var);
-        
+        xs.push(c_var.clone());
+        xs_inv.push(c_inv_var.clone());
+
+        let one_var = FpVar::new_input(cs.clone(), || Ok(E::BaseField::one()))?;
+        final_y_var *= one_var + c_inv_var.mul(&point_var[i]) - &point_var[i];
       }
+
+      enum Op<'a, E: Pairing, IV: PairingVar<E>> {
+        TC(&'a IV::GTVar, FpVar< <E>::BaseField >),
+        UC(&'a IV::G1Var, &'a FpVar< <E>::BaseField >),
+      }
+
+      let res = comms_t_var
+      .iter()
+      .zip(comms_u_var.iter())
+      .zip(xs.iter().zip(xs_inv.iter()))
+      .flat_map(|((comm_t, comm_u), (c, c_inv))| {
+        let (comm_t_l, comm_t_r) = comm_t;
+        let (comm_u_l, comm_u_r) = comm_u;
+
+        // we multiple left side by x^-1 and right side by x
+        vec![
+          Op::TC(comm_t_l, c_inv.clone()),
+          Op::TC(comm_t_r, c.clone()),
+          Op::UC(comm_u_l, c_inv),
+          Op::UC(comm_u_r, c),
+        ]
+      })
+      .fold(MippTUVar::<E,IV>::default() , |mut res, op: Op<E,IV>| {
+        match op {
+          Op::TC(tx, c) => {
+            // let bits_c = c_var.to_bits_le()?; let exp = t_var.pow_le(&bits_c)?;
+            let tx = tx.pow_le(&c.to_bits_le().unwrap()).unwrap();
+            res.tc.mul_assign(&tx);
+          }
+          Op::UC(zx, c) => {
+            let uxp = zx.scalar_mul_le(c.to_bits_le().unwrap().iter()).unwrap();
+            res.uc.add_assign(&uxp);
+          }
+        }
+        res
+      });
+
 
       Ok(())
     }
