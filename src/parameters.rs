@@ -1,15 +1,15 @@
-use ark_bls12_377::Fr;
+use crate::ark_std::One;
 use ark_bls12_377::Fq;
+use ark_bls12_377::Fr;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_ec::pairing::Pairing;
 use ark_ff::BigInt;
-use std::fmt::Debug;
-use std::str::FromStr;
+use ark_ff::BigInteger;
+use ark_ff::BigInteger64;
 use ark_ff::PrimeField;
 use poseidon_parameters::PoseidonParameters;
-use ark_ff::BigInteger;
-use crate::ark_std::One;
-use ark_ff::BigInteger64;
+use std::fmt::Debug;
+use std::str::FromStr;
 // Copyright: https://github.com/nikkolasg/ark-dkg/blob/main/src/parameters.rs
 use json::JsonValue;
 use lazy_static::lazy_static;
@@ -186,8 +186,8 @@ pub fn poseidon_params() -> PoseidonConfig<Fr> {
 
 // <E::BaseField as PrimeField>
 // pub fn params_to_base_field<E> (params: PoseidonConfig<E::ScalarField>) -> PoseidonConfig<E::BaseField>
-// where 
-// E: Pairing, 
+// where
+// E: Pairing,
 // {
 //   let ark = FR["ark"]
 //     .members()
@@ -228,27 +228,37 @@ pub fn poseidon_params() -> PoseidonConfig<Fr> {
 //       .collect()
 // }
 
-pub fn params_to_base_field<E> (params: PoseidonConfig<E::ScalarField>) -> PoseidonConfig<E::BaseField>
-where 
-E: Pairing, 
+pub fn params_to_base_field<E>() -> PoseidonConfig<E::BaseField>
+where
+  E: Pairing,
 {
   let arks = FR["ark"]
-  .members()
-  .map(|ark| {
-    ark
-      .members()
-      .map(|v| Fr::from_str(v.as_str().unwrap()).unwrap())
-      .map(|v| E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le( v.into_bigint().to_bits_le().as_slice())).unwrap())
-      .collect::<Vec<_>>()
-  })
-  .collect::<Vec<_>>();
+    .members()
+    .map(|ark| {
+      ark
+        .members()
+        .map(|v| Fr::from_str(v.as_str().unwrap()).unwrap())
+        .map(|v| {
+          E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
+            v.into_bigint().to_bits_le().as_slice(),
+          ))
+          .unwrap()
+        })
+        .collect::<Vec<_>>()
+    })
+    .collect::<Vec<_>>();
 
   let mds = FR["mds"]
     .members()
     .map(|m| {
       m.members()
         .map(|v| Fr::from_str(v.as_str().unwrap()).unwrap())
-        .map(|v| E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le( v.into_bigint().to_bits_le().as_slice())).unwrap())
+        .map(|v| {
+          E::BaseField::from_bigint(<E::BaseField as PrimeField>::BigInt::from_bits_le(
+            v.into_bigint().to_bits_le().as_slice(),
+          ))
+          .unwrap()
+        })
         .collect::<Vec<_>>()
     })
     .collect::<Vec<_>>();
@@ -267,32 +277,33 @@ E: Pairing,
 }
 pub fn get_bls12377_fq_params() -> PoseidonConfig<Fq> {
   let arks = FR["ark"]
-      .members()
-      .map(|ark| {
-          ark.members()
-              .map(|v| Fq::from_str(v.as_str().unwrap()).unwrap())
-              .collect::<Vec<_>>()
-      })
-      .collect::<Vec<_>>();
+    .members()
+    .map(|ark| {
+      ark
+        .members()
+        .map(|v| Fq::from_str(v.as_str().unwrap()).unwrap())
+        .collect::<Vec<_>>()
+    })
+    .collect::<Vec<_>>();
   let mds = FR["mds"]
-      .members()
-      .map(|m| {
-          m.members()
-              .map(|v| Fq::from_str(v.as_str().unwrap()).unwrap())
-              .collect::<Vec<_>>()
-      })
-      .collect::<Vec<_>>();
-    PoseidonConfig::new(
-      FR["full_rounds"].as_usize().unwrap(),
-      FR["partial_rounds"].as_usize().unwrap(),
-      FR["alpha"].as_u64().unwrap(),
-      mds,
-      arks,
-      FR["rate"].as_usize().unwrap(),
-      // TODO (nikkolasg): check out the concrete parameters for the capacity
-      // so far taken from https://github.com/AleoHQ/snarkVM/blob/d6ce2d3540b9355b59ef580db998188c786f8599/fields/src/traits/poseidon_default.rs#L43
-      1,
-    )
+    .members()
+    .map(|m| {
+      m.members()
+        .map(|v| Fq::from_str(v.as_str().unwrap()).unwrap())
+        .collect::<Vec<_>>()
+    })
+    .collect::<Vec<_>>();
+  PoseidonConfig::new(
+    FR["full_rounds"].as_usize().unwrap(),
+    FR["partial_rounds"].as_usize().unwrap(),
+    FR["alpha"].as_u64().unwrap(),
+    mds,
+    arks,
+    FR["rate"].as_usize().unwrap(),
+    // TODO (nikkolasg): check out the concrete parameters for the capacity
+    // so far taken from https://github.com/AleoHQ/snarkVM/blob/d6ce2d3540b9355b59ef580db998188c786f8599/fields/src/traits/poseidon_default.rs#L43
+    1,
+  )
 }
 
 // Generated from poseidon_transcript::test::poseidon_parameters_generation
