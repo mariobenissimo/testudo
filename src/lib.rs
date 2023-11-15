@@ -36,9 +36,9 @@ mod timer;
 pub(crate) mod transcript;
 mod unipoly;
 
-pub mod parameters;
-
+mod circuit_verifier;
 mod constraints;
+pub mod parameters;
 pub mod poseidon_transcript;
 
 use core::cmp::max;
