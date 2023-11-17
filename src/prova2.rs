@@ -9,7 +9,6 @@ use crate::{
   sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
   unipoly::UniPoly,
 };
-use ark_serialize::CanonicalSerialize;
 use ark_bls12_377::g1::G1Affine;
 use ark_bls12_377::Fr;
 use ark_bls12_377::G1Projective;
@@ -40,6 +39,7 @@ use ark_r1cs_std::{
   prelude::{EqGadget, FieldVar},
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
+use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 use digest::generic_array::typenum::True;
 use std::ops::AddAssign;
@@ -65,17 +65,17 @@ where
   E: Pairing,
   IV: PairingVar<E>,
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
-  <IV as ark_r1cs_std::pairing::PairingVar<E>>::G1Var: AbsorbGadget<<E as Pairing>::BaseField>
+  <IV as ark_r1cs_std::pairing::PairingVar<E>>::G1Var: AbsorbGadget<<E as Pairing>::BaseField>,
 {
   fn generate_constraints(
     mut self,
     cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
   ) -> Result<(), SynthesisError> {
-    let exp_hash_var = FpVar::<E::BaseField>::new_witness(cs.clone(), || Ok(self.hash.clone())).unwrap();
+    let exp_hash_var =
+      FpVar::<E::BaseField>::new_witness(cs.clone(), || Ok(self.hash.clone())).unwrap();
 
     println!("EXP_HASH_VAR: ");
     println!("{}", exp_hash_var.value().unwrap());
-
 
     let point_var_affine = IV::G1Var::new_input(cs.clone(), || Ok(self.point.clone())).unwrap();
     println!("POINT 2: ");
@@ -85,15 +85,22 @@ where
 
     // println!("SCALAR_VAR: ");
     // println!("{}", scalar_var.value().unwrap());
-
-    self.constraint_sponge.absorb(&point_var_affine.to_bits_be().unwrap()).unwrap();
+    let prova = &point_var_affine.to_bytes().unwrap();
+    println!("STAMPO VEC BYTE CIRCUIT");
+    for v in prova.clone() {
+      print!("{} - ", v.value().unwrap());
+    }
+    println!();
+    self
+      .constraint_sponge
+      .absorb(&point_var_affine.to_bytes().unwrap())
+      .unwrap();
 
     let hash_var = self
       .constraint_sponge
       .squeeze_field_elements(1)
       .unwrap()
       .remove(0);
-
 
     println!("HASH_VAR: ");
     println!("{}", hash_var.value().unwrap());
@@ -107,7 +114,9 @@ where
 mod tests {
   use super::*;
   use crate::parameters::get_bls12377_fq_params;
+  use crate::transcript::Transcript;
   use ark_bls12_377::constraints::G1Var;
+  use ark_bls12_377::{constraints::PairingVar as IV, constraints::*, Bls12_377 as I};
   use ark_crypto_primitives::sponge::constraints::CryptographicSpongeVar;
   use ark_crypto_primitives::sponge::poseidon::constraints::PoseidonSpongeVar;
   use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
@@ -119,8 +128,6 @@ mod tests {
   use ark_relations::{ns, r1cs::ConstraintSystem};
   use ark_std::test_rng;
   use ark_std::UniformRand;
-  use crate::transcript::Transcript;
-  use ark_bls12_377::{constraints::PairingVar as IV, constraints::*, Bls12_377 as I};
   #[test]
   fn absorb_test() {
     let mut rng = test_rng();
@@ -142,24 +149,24 @@ mod tests {
       ))
       .unwrap();
 
-   //native_sponge.absorb(&point.clone());
+    //native_sponge.absorb(&point.clone());
     println!("POINT 1: ");
     println!("{}", point);
-    native_sponge.append(b"U",&point);
+    native_sponge.append(b"U", &point);
 
-    let hash = native_sponge.challenge_scalar::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>(b"random_point");
+    let hash = native_sponge
+      .challenge_scalar::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>(b"random_point");
 
     println!("HASH: ");
     println!("{}", hash);
 
     // let point_var_affine = G1Var::new_input(cs.clone(), || Ok(point.clone())).unwrap();
     // constraint_sponge.absorb(&point_var_affine);
-  
+
     // let scalar_var = FpVar::new_witness(cs.clone(), || Ok(scalar_in_fq)).unwrap();
     // let exp_hash_var = FpVar::new_witness(cs.clone(), || Ok(hash.clone())).unwrap();
     // constraint_sponge.absorb(&scalar_var);
-    let circuit: TestudoCommVerifier< I, IV> = TestudoCommVerifier {
-        
+    let circuit: TestudoCommVerifier<I, IV> = TestudoCommVerifier {
       native_sponge,
       constraint_sponge,
       point,

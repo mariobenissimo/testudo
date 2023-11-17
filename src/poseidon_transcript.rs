@@ -22,12 +22,13 @@ impl<F: PrimeField> Transcript for PoseidonTranscript<F> {
   fn append<S: CanonicalSerialize>(&mut self, _label: &'static [u8], point: &S) {
     let mut buf = Vec::new();
     point
-      .serialize_with_mode(&mut buf, Compress::Yes)
+      .serialize_with_mode(&mut buf, Compress::No)
       .expect("serialization failed");
     println!("STAMPO VEC BYTE");
     for v in buf.clone() {
-      println!("{}", v);
+      print!("{} - ", v);
     }
+    println!();
     self.sponge.absorb(&buf);
   }
 
@@ -115,7 +116,6 @@ impl<F: PrimeField> PoseidonTranscript<F> {
       .unwrap();
     self.sponge.absorb(&point_encoding);
   }
-
 }
 
 pub trait TranscriptWriter<F: PrimeField> {
