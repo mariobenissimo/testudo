@@ -24,6 +24,10 @@ impl<F: PrimeField> Transcript for PoseidonTranscript<F> {
     point
       .serialize_with_mode(&mut buf, Compress::Yes)
       .expect("serialization failed");
+    println!("STAMPO VEC BYTE");
+    for v in buf.clone() {
+      println!("{}", v);
+    }
     self.sponge.absorb(&buf);
   }
 
@@ -92,6 +96,26 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     g_t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
     self.append_bytes(b"", &bytes);
   }
+
+  pub fn append_g1<E>(&mut self, _label: &'static [u8], g_t: &E::G1Affine)
+  where
+    E: Pairing,
+  {
+    let mut bytes = Vec::new();
+    g_t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
+    self.append_bytes(b"", &bytes);
+  }
+  pub fn append_point_g1<G>(&mut self, _label: &'static [u8], point: &G)
+  where
+    G: CurveGroup,
+  {
+    let mut point_encoding = Vec::new();
+    point
+      .serialize_with_mode(&mut point_encoding, Compress::Yes)
+      .unwrap();
+    self.sponge.absorb(&point_encoding);
+  }
+
 }
 
 pub trait TranscriptWriter<F: PrimeField> {

@@ -158,7 +158,6 @@ where
     );
 
     assert!(res_mipp.unwrap() == true);
-    println!("ZIO CANE 161");
     let mut a_rev_var = a_var.to_vec().clone();
     a_rev_var.reverse();
 
@@ -171,7 +170,6 @@ where
       self.pst_proof,
     );
     assert!(res_var.unwrap() == true);
-    println!("ZIO CANE 174");
     Ok(())
   }
 }
@@ -312,7 +310,6 @@ where
   let right = IV::final_exponentiation(&right_ml).unwrap();
   left.enforce_equal(&right); // OK
   Ok(true)
-
 }
 
 fn mipp_verify_gadget<E: Pairing, IV: PairingVar<E>>(
@@ -456,7 +453,6 @@ where
   );
   let check_h = check_h_var.unwrap();
   assert!(check_h.clone() == true);
-  println!("ZIO CANE 466");
   let final_a_var = IV::G1Var::new_input(cs.clone(), || Ok(proof.final_a))?;
   let final_u_var = final_a_var
     .scalar_mul_le(final_y_var.to_bits_le().unwrap().iter())
@@ -473,13 +469,11 @@ where
   //ref_final_res_var.tc.enforce_equal(&final_t_var).unwrap();
 
   assert!(check_t == true);
-  println!("ZIO CANE 487");
 
   let check_u = true;
- //ref_final_res_var.uc.enforce_equal(&final_u_var).unwrap() {
-  
+  //ref_final_res_var.uc.enforce_equal(&final_u_var).unwrap() {
+
   assert!(check_u == true);
-  println!("ZIO CANE 497");
   Ok(check_h & check_u)
 }
 #[cfg(test)]
