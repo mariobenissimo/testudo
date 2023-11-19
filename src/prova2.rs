@@ -23,6 +23,7 @@ use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, CryptographicSpong
 use ark_crypto_primitives::Error;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
+use ark_ec::CurveGroup;
 use ark_ff::BigInteger;
 use ark_ff::PrimeField;
 use ark_poly_commit::multilinear_pc::data_structures::CommitmentG2;
@@ -46,7 +47,6 @@ use std::ops::AddAssign;
 use std::ops::Mul;
 use std::ops::MulAssign;
 use std::{borrow::Borrow, marker::PhantomData};
-
 struct TestudoCommVerifier<E, IV>
 where
   E: Pairing,
@@ -85,16 +85,62 @@ where
 
     // println!("SCALAR_VAR: ");
     // println!("{}", scalar_var.value().unwrap());
+    // let x1 = point_var_affine.value().unwrap().into_affine().x().unwrap();
+    // let y1 = point_var_affine.value().unwrap().into_affine().y().unwrap();
+    // println!("X: ");
+    // println!("{}", x1);
+    // println!("Y: ");
+    // println!("{}", y1);
+    // let mut buf = Vec::new();
+    // x1
+    //   .serialize_with_mode(&mut buf, Compress::No)
+    //   .expect("serialization failed");
+
+    // println!("STAMPO VEC BYTE X1");
+    //   for v in buf.clone() {
+    //     print!("{} - ", v);
+    // }
+
+    // println!("");
+
+    // let mut buf2 = Vec::new();
+    // y1
+    //   .serialize_with_mode(&mut buf2, Compress::No)
+    //   .expect("serialization failed");
+
+    println!("STAMPO VEC BYTE");
     let prova = &point_var_affine.to_bytes().unwrap();
-    println!("STAMPO VEC BYTE CIRCUIT");
     for v in prova.clone() {
       print!("{} - ", v.value().unwrap());
     }
-    println!();
-    self
-      .constraint_sponge
-      .absorb(&point_var_affine.to_bytes().unwrap())
-      .unwrap();
+
+    // println!("ULTIMA PROVA");
+
+    // let mut buf3 = Vec::new();
+    // point_var_affine.value().unwrap()
+    //   .serialize_with_mode(&mut buf3, Compress::No)
+    //   .expect("serialization failed");
+    // println!("STAMPO VEC SERIALIZE CIRCUIT");
+    // for v in buf3.clone() {
+    //   print!("{} - ", v);
+    // }
+    // println!();
+    // let prova = point_var_affine.to_bytes()?;
+    // let vec2 = Vec::new();
+    // for v in buf3.clone() {
+    //     vec2.push(UInt8::);
+    // }
+    let mut bits = point_var_affine.to_bits_le()?;
+    let bytes: Vec<UInt8<E::BaseField>> = bits
+      .chunks(8)
+      .map(|chunk| UInt8::from_bits_le(chunk))
+      .collect();
+
+    println!("STAMPO VEC SERIALIZE CIRCUIT");
+    for v in bytes.clone() {
+      print!("{} - ", v.value().unwrap());
+    }
+    self.constraint_sponge.absorb(&bytes).unwrap();
 
     let hash_var = self
       .constraint_sponge

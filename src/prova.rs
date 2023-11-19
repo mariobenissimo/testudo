@@ -1,50 +1,23 @@
-use crate::ark_std::One;
-use crate::ark_std::UniformRand;
-use crate::mipp::MippProof;
-use crate::parameters::get_bls12377_fq_params;
 use crate::parameters::params_to_base_field;
-use crate::{
-  math::Math,
-  poseidon_transcript::PoseidonTranscript,
-  sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
-  unipoly::UniPoly,
-};
-use ark_bls12_377::g1::G1Affine;
-use ark_bls12_377::Fr;
-use ark_bls12_377::G1Projective;
+use crate::poseidon_transcript::PoseidonTranscript;
 use ark_crypto_primitives::sponge::constraints::AbsorbGadget;
-use ark_crypto_primitives::sponge::poseidon;
-use ark_crypto_primitives::sponge::Absorb;
 use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,
   poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig},
 };
 use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, CryptographicSponge};
-use ark_crypto_primitives::Error;
 use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
-use ark_ff::BigInteger;
-use ark_ff::PrimeField;
-use ark_poly_commit::multilinear_pc::data_structures::CommitmentG2;
-use ark_poly_commit::multilinear_pc::data_structures::ProofG1;
-use ark_poly_commit::multilinear_pc::{
-  data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
-  MultilinearPC,
-};
-use ark_r1cs_std::groups::bls12::G1Var;
 use ark_r1cs_std::prelude::*;
 use ark_r1cs_std::{
-  alloc::{AllocVar, AllocationMode},
+  alloc::AllocVar,
   fields::fp::FpVar,
-  prelude::{EqGadget, FieldVar},
+  prelude::EqGadget,
 };
-use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
+use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
-use digest::generic_array::typenum::True;
-use std::ops::AddAssign;
-use std::ops::Mul;
-use std::ops::MulAssign;
-use std::{borrow::Borrow, marker::PhantomData};
+use std::marker::PhantomData;
+
 
 struct TestudoCommVerifier<E, IV>
 where
@@ -64,34 +37,67 @@ where
   E: Pairing,
   IV: PairingVar<E>,
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
+  <IV as ark_r1cs_std::pairing::PairingVar<E>>::G1Var: AbsorbGadget<<E as Pairing>::BaseField>,
 {
   fn generate_constraints(
     mut self,
     cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
   ) -> Result<(), SynthesisError> {
-    let exp_hash_var =
-      FpVar::<E::BaseField>::new_witness(cs.clone(), || Ok(self.hash.clone())).unwrap();
+   
 
-    println!("EXP_HASH_VAR: ");
-    println!("{}", exp_hash_var.value().unwrap());
-    //let point_var_affine = IV::G1Var::new_input(cs.clone(), || Ok(self.point.clone())).unwrap();
-    // self
-    //   .constraint_sponge
-    //   .clone()
-    //   .absorb(&point_var_affine)
-    //   .unwrap();
+    let params: PoseidonConfig<E::BaseField> = params_to_base_field::<E>();
 
-    println!("SCALAR_FQ 2: ");
-    println!("{}", self.scalar_in_fq);
+    let mut buf = Vec::new();
+    self.point
+      .serialize_with_mode(&mut buf, Compress::No)
+      .expect("serialization failed");
 
-    let scalar_var = FpVar::new_witness(cs.clone(), || Ok(self.scalar_in_fq)).unwrap();
+    let mut sponge_naive = PoseidonSponge::<E::BaseField>::new(&params);
 
-    println!("SCALAR_VAR: ");
-    println!("{}", scalar_var.value().unwrap());
-    self.constraint_sponge.absorb(&scalar_var).unwrap();
+    let mut sponge_var = PoseidonSpongeVar::<E::BaseField>::new(cs.clone(),&params);
 
-    let hash_var = self
-      .constraint_sponge
+    sponge_naive.absorb(&buf);
+
+    let real_hash: E::BaseField = sponge_naive.squeeze_field_elements(1).remove(0);
+
+    println!("REAL HASH ");
+    println!("{}", real_hash);
+
+
+    let real_hash_var = FpVar::new_input(cs.clone(), || Ok(real_hash)).unwrap();
+
+    println!("REAL HASH VAR");
+    println!("{}", real_hash_var.value().unwrap());
+
+    let point_var_affine = IV::G1Var::new_input(cs.clone(), || Ok(self.point.clone())).unwrap();
+    
+    //start allocation for absorb
+    let mut buf2 = Vec::new();
+    point_var_affine.value().unwrap()
+      .serialize_with_mode(&mut buf2, Compress::No)
+      .expect("serialization failed");
+
+    let mut x_var_vec = Vec::new();
+  
+    for x in buf2 {
+      x_var_vec.push(UInt8::new_input(cs.clone(), || Ok(x))?);
+    }
+    //end allocation for absorb
+   
+    println!();
+    println!("STAMPO BYTE DI VARIABILI");
+    for v in x_var_vec.clone() {
+        print!("{} - ", v.value()?);
+      }
+    println!();
+    
+
+    sponge_var
+      .absorb(&x_var_vec)
+      .unwrap();
+    
+   
+    let hash_var = sponge_var
       .squeeze_field_elements(1)
       .unwrap()
       .remove(0);
@@ -99,7 +105,7 @@ where
     println!("HASH_VAR: ");
     println!("{}", hash_var.value().unwrap());
 
-    hash_var.enforce_equal(&exp_hash_var).unwrap();
+    hash_var.enforce_equal(&real_hash_var).unwrap();
     Ok(())
   }
 }
@@ -109,17 +115,13 @@ mod tests {
   use super::*;
   use crate::parameters::get_bls12377_fq_params;
   use crate::transcript::Transcript;
-  use ark_bls12_377::constraints::G1Var;
-  use ark_bls12_377::{constraints::PairingVar as IV, constraints::*, Bls12_377 as I};
+  use ark_bls12_377::{constraints::PairingVar as IV, Bls12_377 as I};
   use ark_crypto_primitives::sponge::constraints::CryptographicSpongeVar;
   use ark_crypto_primitives::sponge::poseidon::constraints::PoseidonSpongeVar;
-  use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
-  use ark_crypto_primitives::sponge::CryptographicSponge;
   use ark_ec::bls12::Bls12;
   use ark_ec::pairing::Pairing;
   use ark_ff::{BigInteger, PrimeField};
-  use ark_r1cs_std::{fields::fp::FpVar, groups::CurveVar, prelude::*};
-  use ark_relations::{ns, r1cs::ConstraintSystem};
+  use ark_relations::r1cs::ConstraintSystem;
   use ark_std::test_rng;
   use ark_std::UniformRand;
   #[test]
@@ -143,10 +145,8 @@ mod tests {
       ))
       .unwrap();
 
-    //native_sponge.absorb(&point.clone());
-    println!("SCALAR_FQ 1: ");
-    println!("{}", scalar_in_fq);
-    native_sponge.append_scalar(b"U", &scalar_in_fq);
+ 
+    native_sponge.append(b"U", &point);
 
     let hash = native_sponge
       .challenge_scalar::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>(b"random_point");
@@ -154,12 +154,6 @@ mod tests {
     println!("HASH: ");
     println!("{}", hash);
 
-    // let point_var_affine = G1Var::new_input(cs.clone(), || Ok(point.clone())).unwrap();
-    // constraint_sponge.absorb(&point_var_affine);
-
-    // let scalar_var = FpVar::new_witness(cs.clone(), || Ok(scalar_in_fq)).unwrap();
-    // let exp_hash_var = FpVar::new_witness(cs.clone(), || Ok(hash.clone())).unwrap();
-    // constraint_sponge.absorb(&scalar_var);
     let circuit: TestudoCommVerifier<I, IV> = TestudoCommVerifier {
       native_sponge,
       constraint_sponge,
@@ -170,8 +164,7 @@ mod tests {
     };
 
     circuit.generate_constraints(cs.clone()).unwrap();
-    //let hash_var = constraint_sponge.squeeze_field_elements(1).unwrap().remove(0);
-    //hash_var.enforce_equal(&exp_hash_var).unwrap();
+ ;
     assert!(cs.is_satisfied().unwrap());
   }
 }

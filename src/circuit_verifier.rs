@@ -32,6 +32,7 @@ use ark_r1cs_std::{
   prelude::{EqGadget, FieldVar},
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
+use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 use digest::generic_array::typenum::True;
 use std::ops::AddAssign;
@@ -240,7 +241,7 @@ where
   let right_ml = IV::miller_loop(&pairing_lefts_var, &pairing_rights_var)?;
   let right = IV::final_exponentiation(&right_ml)?;
 
-  //left.enforce_equal(&right).unwrap();
+  left.enforce_equal(&right).unwrap();
   Ok(true)
 }
 
@@ -358,7 +359,20 @@ where
   let params: PoseidonConfig<E::BaseField> = params_to_base_field::<E>();
   let mut transcript_var = PoseidonSpongeVar::new(cs.clone(), &params);
 
-  let U_g_product_var_bytes = U_g_product_var.to_bytes()?;
+  // PRIMA ABSORB
+  let mut U_g_product_buf = Vec::new();
+  U_g_product_var
+    .value()
+    .unwrap()
+    .serialize_with_mode(&mut U_g_product_buf, Compress::No)
+    .expect("serialization failed");
+
+  let mut U_g_product_var_bytes = Vec::new();
+
+  for b in U_g_product_buf {
+    U_g_product_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+  }
+
   transcript_var.absorb(&U_g_product_var_bytes)?;
 
   let one_var = FpVar::new_input(cs.clone(), || Ok(E::BaseField::one()))?;
@@ -366,20 +380,69 @@ where
     let (comm_u_l, comm_u_r) = comm_u;
     let (comm_t_l, comm_t_r) = comm_t;
     // Fiat-Shamir challenge
+    // ABSORB COMM_U_R
+    let mut comm_u_l_buf = Vec::new();
+    comm_u_l
+      .value()
+      .unwrap()
+      .serialize_with_mode(&mut comm_u_l_buf, Compress::No)
+      .expect("serialization failed");
 
-    let comm_u_l_bytes = comm_u_l.to_bytes()?;
-    let comm_u_r_bytes = comm_u_r.to_bytes()?;
-    transcript_var.absorb(&comm_u_l_bytes)?;
-    transcript_var.absorb(&comm_u_r_bytes)?;
-    // ATTENTION
-    let comm_t_l_bytes = comm_t_l.to_bytes()?;
-    transcript_var.absorb(&comm_t_l_bytes)?;
-    let comm_t_r_bytes = comm_t_r.to_bytes()?;
-    transcript_var.absorb(&comm_t_r_bytes)?;
-    // transcript_var.absorb(comm_t_r);
+    let mut comm_u_l_var_bytes = Vec::new();
+
+    for b in comm_u_l_buf {
+      comm_u_l_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+    }
+    transcript_var.absorb(&comm_u_l_var_bytes)?;
+    // ABSORB COMM_U_R
+    let mut comm_u_r_buf = Vec::new();
+    comm_u_r
+      .value()
+      .unwrap()
+      .serialize_with_mode(&mut comm_u_r_buf, Compress::No)
+      .expect("serialization failed");
+
+    let mut comm_u_r_var_bytes = Vec::new();
+
+    for b in comm_u_r_buf {
+      comm_u_r_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+    }
+    transcript_var.absorb(&comm_u_r_var_bytes)?;
+    // ABSORB COMM_T_L
+    let mut comm_t_l_buf = Vec::new();
+    comm_t_l
+      .value()
+      .unwrap()
+      .serialize_with_mode(&mut comm_t_l_buf, Compress::No)
+      .expect("serialization failed");
+
+    let mut comm_t_l_var_bytes = Vec::new();
+
+    for b in comm_t_l_buf {
+      comm_t_l_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+    }
+    transcript_var.absorb(&comm_t_l_var_bytes)?;
+    // ABSORB COMM_T_R
+    let mut comm_t_r_buf = Vec::new();
+    comm_t_r
+      .value()
+      .unwrap()
+      .serialize_with_mode(&mut comm_t_r_buf, Compress::No)
+      .expect("serialization failed");
+
+    let mut comm_t_r_var_bytes = Vec::new();
+
+    for b in comm_t_r_buf {
+      comm_t_r_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+    }
+    transcript_var.absorb(&comm_t_r_var_bytes)?;
+
     let c_inv_var = transcript_var.squeeze_field_elements(1).unwrap().remove(0);
     let c_var = c_inv_var.inverse().unwrap();
 
+    println!("PRIMA SQUEEZY CIRCUIT");
+    println!("{}", c_inv_var.value().unwrap());
+    break;
     xs.push(c_var.clone());
     xs_inv.push(c_inv_var.clone());
 
@@ -431,7 +494,8 @@ where
     let r = transcript_var.squeeze_field_elements(1).unwrap().remove(0);
     rs.push(r);
   }
-
+  println!("SONO QUA");
+  println!("{}", rs[0].value().unwrap());
   // let rs_var = rs.clone();
   let v_var: FpVar<<E as Pairing>::BaseField> = (0..m)
     .into_iter()

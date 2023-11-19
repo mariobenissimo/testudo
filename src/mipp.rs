@@ -213,6 +213,9 @@ impl<E: Pairing> MippProof<E> {
       transcript.append(b"comm_t_l", comm_t_l);
       transcript.append(b"comm_t_r", comm_t_r);
       let c_inv = transcript.challenge_scalar::<E::ScalarField>(b"challenge_i");
+      println!("PRIMA SQUEEZY NAIVE");
+      println!("{}", c_inv);
+      break;
       let c = c_inv.inverse().unwrap();
 
       xs.push(c);
