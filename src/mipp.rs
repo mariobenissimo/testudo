@@ -129,6 +129,7 @@ impl<E: Pairing> MippProof<E> {
       xs_inv.len(),
       Self::polynomial_evaluations_from_transcript::<E::ScalarField>(&xs_inv),
     );
+
     let c = MultilinearPC::<E>::commit_g2(ck, &poly);
     debug_assert!(c.h_product == final_h);
 
@@ -139,8 +140,7 @@ impl<E: Pairing> MippProof<E> {
       .map(|_| transcript.challenge_scalar::<E::ScalarField>(b"random_point"))
       .collect();
 
-    println!("Prover");
-    println!("{}", rs[0]);
+    println!("RS PROVER {:?}", rs);
     let pst_proof_h = MultilinearPC::<E>::open_g1(ck, &poly, &rs);
 
     Ok(MippProof {
@@ -213,9 +213,6 @@ impl<E: Pairing> MippProof<E> {
       transcript.append(b"comm_t_l", comm_t_l);
       transcript.append(b"comm_t_r", comm_t_r);
       let c_inv = transcript.challenge_scalar::<E::ScalarField>(b"challenge_i");
-      println!("PRIMA SQUEEZY NAIVE");
-      println!("{}", c_inv);
-      break;
       let c = c_inv.inverse().unwrap();
 
       xs.push(c);
@@ -283,8 +280,6 @@ impl<E: Pairing> MippProof<E> {
       rs.push(r);
     }
 
-    println!("Verifier 1");
-    println!("{}", rs[0]);
     // Given p_h is structured as defined above, the verifier can compute
     // p_h(rs) by themselves in O(m) time
     let v = (0..m)
@@ -292,12 +287,12 @@ impl<E: Pairing> MippProof<E> {
       .map(|i| E::ScalarField::one() + rs[i].mul(xs_inv[m - i - 1]) - rs[i])
       .product();
 
-    println!("Verifier 2");
-    println!("{}", rs[0]);
     let comm_h = CommitmentG2 {
       nv: m,
       h_product: proof.final_h,
     };
+
+    println!("RS VERIFIER {:?}",rs);
 
     // final_h is the commitment of p_h so the verifier can perform
     // a PST verification at the random point rs, given the pst proof

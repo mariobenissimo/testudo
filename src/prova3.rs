@@ -8,7 +8,7 @@
 // };
 // use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, CryptographicSponge};
 // use ark_ec::CurveGroup;
-// use ark_ec::pairing::Pairing;
+// use ark_ec::pairing::{Pairing, PairingOutput};
 // use ark_r1cs_std::fields::nonnative::NonNativeFieldVar;
 // use ark_r1cs_std::prelude::*;
 // use ark_r1cs_std::{
@@ -29,7 +29,7 @@
 //   IV: PairingVar<E>,
 // {
 //   constraint_sponge: PoseidonSpongeVar<E::BaseField>,
-//   g1: E::G1Affine,
+//   gt: PairingOutput<E>,
 //   hash: E::ScalarField,
 //   _iv: PhantomData<IV>,
 // }
@@ -39,6 +39,7 @@
 //   E: Pairing,
 //   IV: PairingVar<E>,
 //   IV::G1Var: CurveVar<E::G1, E::BaseField>,
+//   IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
 
 // {
 //   fn generate_constraints(
@@ -64,7 +65,7 @@
 //     // .unwrap();
 
   
-//     let g1_var = IV::G1Var::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.g1))?;
+//     let gt_var = IV::GTVar::new_input(cs.clone(), || Ok(self.gt.0))?;
 
 //     // let x = self.g1.x().unwrap();
 //     // let y = self.g1.y().unwrap();
@@ -82,7 +83,7 @@
 //     // println!("y");
 //     // println!("{:?}", y);
 //     let mut buf3 = Vec::new();
-//     g1_var.value().unwrap()
+//     gt_var.value().unwrap()
 //       .serialize_with_mode(&mut buf3, Compress::No)
 //       .expect("serialization failed");
 
@@ -107,7 +108,7 @@
 //     let (hash_var1, hash_var2) = self.constraint_sponge
 //       .squeeze_nonnative_field_elements::<E::ScalarField>(1)
 //       .unwrap();
-// // 
+
 //     // //let hash_var1 = self.constraint_sponge.squeeze_field_elements(1).unwrap().remove(0);
 //     println!("HASH_VAR 1: ");
 //     println!("{:?}", hash_var1.value().unwrap());
@@ -166,17 +167,17 @@
 //     let gt = ark_bls12_377::Bls12_377::pairing(a, b);
 
 //     println!("G1 ");
-//     println!("{:?}", g1);
+//     println!("{:?}", gt);
 
-//     let mut buf = Vec::new();
-//     g1
-//       .serialize_with_mode(&mut buf, Compress::No)
-//       .expect("serialization failed");
+//     // let mut buf = Vec::new();
+//     // g1
+//     //   .serialize_with_mode(&mut buf, Compress::No)
+//     //   .expect("serialization failed");
 
-//     println!("G1 BYTES");
-//     println!("{:?}", buf);
+//     // println!("G1 BYTES");
+//     // println!("{:?}", buf);
 
-//     native_sponge.append(b"U", &g1);
+//     native_sponge.append(b"U", &gt);
 
 //     let hash = native_sponge
 //       .challenge_scalar::<<ark_ec::bls12::Bls12<ark_bls12_377::Config> as ark_ec::pairing::Pairing>::ScalarField>(b"random_point");
@@ -186,7 +187,7 @@
 
 //     let circuit: TestudoCommVerifier<I,IV> = TestudoCommVerifier {
 //       constraint_sponge,
-//       g1,
+//       gt,
 //       hash,
 //       _iv: PhantomData,
 //     };

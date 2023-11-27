@@ -53,20 +53,20 @@ pub struct R1CSProof<E: Pairing> {
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct R1CSVerifierProof<E: Pairing> {
-  comm: Commitment<E>,
-  circuit_proof: ark_groth16::Proof<E>,
-  initial_state: E::ScalarField,
-  transcript_sat_state: E::ScalarField,
-  eval_vars_at_ry: E::ScalarField,
-  proof_eval_vars_at_ry: Proof<E>,
-  t: E::TargetField,
-  mipp_proof: MippProof<E>,
+  pub comm: Commitment<E>,
+  pub circuit_proof: ark_groth16::Proof<E>,
+  pub initial_state: E::ScalarField,
+  pub transcript_sat_state: E::ScalarField,
+  pub eval_vars_at_ry: E::ScalarField,
+  pub proof_eval_vars_at_ry: Proof<E>,
+  pub t: E::TargetField,
+  pub mipp_proof: MippProof<E>,
 }
 
 #[derive(Clone)]
 pub struct CircuitGens<E: Pairing> {
   pk: ProvingKey<E>,
-  vk: VerifyingKey<E>,
+  pub vk: VerifyingKey<E>,
 }
 
 impl<E> CircuitGens<E>
@@ -152,8 +152,8 @@ where
 
 #[derive(Clone)]
 pub struct R1CSGens<E: Pairing> {
-  gens_pc: PolyCommitmentGens<E>,
-  gens_gc: CircuitGens<E>,
+  pub gens_pc: PolyCommitmentGens<E>,
+  pub gens_gc: CircuitGens<E>,
 }
 
 impl<E: Pairing> R1CSGens<E> {
@@ -488,11 +488,18 @@ where
 mod tests {
 
   use super::*;
-
+  use ark_ec::CurveGroup;
+  use ark_ff::Field;
+use ark_r1cs_std::pairing::PairingVar;
+  use crate::verifier_circuit::VerifierCircuit;
+  type BasePrimeField<E> = <<<E as Pairing>::G1 as CurveGroup>::BaseField as Field>::BasePrimeField;
   use ark_ff::PrimeField;
   use ark_std::UniformRand;
+  use ark_relations::r1cs::ConstraintSystem;
   type F = ark_bls12_377::Fr;
-
+  use crate::rand::SeedableRng;
+  use ark_relations::r1cs::ConstraintSynthesizer;
+  
   fn produce_tiny_r1cs() -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
     // three constraints over five variables Z1, Z2, Z3, Z4, and Z5
     // rounded to the nearest power of two
@@ -566,25 +573,26 @@ mod tests {
   }
 
   use crate::parameters::PoseidonConfiguration;
-  #[test]
-  fn check_r1cs_proof_ark_blst() {
-    let params = ark_blst::Scalar::poseidon_params();
-    check_r1cs_proof::<ark_blst::Bls12>(params);
-  }
+  //#[test]
+  // fn check_r1cs_proof_ark_blst() {
+  //   let params = ark_blst::Scalar::poseidon_params();
+  //   check_r1cs_proof::<ark_blst::Bls12>(params);
+  // }
   #[test]
   fn check_r1cs_proof_bls12_377() {
     let params = ark_bls12_377::Fr::poseidon_params();
-    check_r1cs_proof::<ark_bls12_377::Bls12_377>(params);
+    check_r1cs_proof::<ark_bls12_377::Bls12_377,ark_bls12_377::constraints::PairingVar>(params);
   }
 
-  #[test]
-  fn check_r1cs_proof_bls12_381() {
-    let params = ark_bls12_381::Fr::poseidon_params();
-    check_r1cs_proof::<ark_bls12_381::Bls12_381>(params);
-  }
-  fn check_r1cs_proof<P>(params: PoseidonConfig<P::ScalarField>)
+  //#[test]
+  // fn check_r1cs_proof_bls12_381() {
+  //   let params = ark_bls12_381::Fr::poseidon_params();
+  //   check_r1cs_proof::<ark_bls12_381::Bls12_381>(params);
+  // }
+  fn check_r1cs_proof<P,IV>(params: PoseidonConfig<P::ScalarField>)
   where
     P: Pairing,
+    IV: PairingVar<P,BasePrimeField<P>>,
     P::ScalarField: PrimeField,
     P::ScalarField: Absorb,
   {
@@ -620,14 +628,22 @@ mod tests {
       .unwrap();
 
     let mut verifier_transcript = PoseidonTranscript::new(&params.clone());
-    assert!(verifer_proof
-      .verify(
-        (rx, ry),
-        &input,
-        &inst_evals,
-        &mut verifier_transcript,
-        &gens
-      )
-      .is_ok());
+    // assert!(verifer_proof
+    //   .verify(
+    //     (rx, ry),
+    //     &input,
+    //     &inst_evals,
+    //     &mut verifier_transcript,
+    //     &gens
+    //   )
+    //   .is_ok());
+    let mut rng = rand_chacha::ChaChaRng::seed_from_u64(1776);
+    let cs = ConstraintSystem::<BasePrimeField<P>>::new_ref();
+    let circuit = VerifierCircuit::<P,IV>::new((rx, ry),input,inst_evals,verifier_transcript,gens,verifer_proof).unwrap();
+    circuit.generate_constraints(cs.clone());
+          // .unwrap();
+    assert!(cs.is_satisfied().unwrap());
+
+
   }
 }

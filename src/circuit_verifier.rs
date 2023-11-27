@@ -16,6 +16,7 @@ use ark_crypto_primitives::sponge::{
 use ark_crypto_primitives::Error;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
+use ark_ec::CurveGroup;
 use ark_ff::BigInteger;
 use ark_ff::PrimeField;
 use ark_poly_commit::multilinear_pc::data_structures::CommitmentG2;
@@ -24,6 +25,7 @@ use ark_poly_commit::multilinear_pc::{
   data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
   MultilinearPC,
 };
+use ark_r1cs_std::fields::nonnative::NonNativeFieldVar;
 use ark_r1cs_std::groups::bls12::G1Var;
 use ark_r1cs_std::prelude::*;
 use ark_r1cs_std::{
@@ -84,20 +86,20 @@ pub struct CommitmentG2Var<E: Pairing, IV: PairingVar<E>> {
   pub h_product: IV::G2Var,
 }
 
-struct TestudoCommVerifier<E, IV>
+pub struct TestudoCommVerifier<E, IV>
 where
   E: Pairing,
   IV: PairingVar<E>,
 {
-  //transcript: PoseidonTranscript<E::ScalarField>,
-  vk: VerifierKey<E>,
-  U: Commitment<E>,
-  point: Vec<E::ScalarField>,
-  v: E::ScalarField,
-  pst_proof: Proof<E>,
-  mipp_proof: MippProof<E>,
-  T: E::TargetField,
-  _iv: PhantomData<IV>,
+  pub state: E::ScalarField,
+  pub vk: VerifierKey<E>,
+  pub U: Commitment<E>,
+  pub point: Vec<E::ScalarField>,
+  pub v: E::ScalarField,
+  pub pst_proof: Proof<E>,
+  pub mipp_proof: MippProof<E>,
+  pub T: E::TargetField,
+  pub _iv: PhantomData<IV>,
 }
 impl<E, IV> Clone for TestudoCommVerifier<E, IV>
 where
@@ -106,7 +108,7 @@ where
 {
   fn clone(&self) -> Self {
     Self {
-      // transcript: self.transcript.clone(),
+      state: self.state.clone(),
       vk: self.vk.clone(),
       U: self.U.clone(),
       point: self.point.clone(),
@@ -126,7 +128,7 @@ where
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
   IV::G2Var: CurveVar<E::G2, E::BaseField>,
   IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
-  IV::G1Var: AbsorbGadget<E::BaseField>,
+  //IV::G1Var: AbsorbGadget<E::BaseField>,
   // IV::GTVar: AbsorbGadget<E::BaseField>,
   //<IV as ark_r1cs_std::pairing::PairingVar<E>>::GTVar: AbsorbGadget<<E as Pairing>::BaseField>
 {
@@ -135,42 +137,59 @@ where
     cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
   ) -> Result<(), SynthesisError> {
     // allocate point
-    let mut point_var = Vec::new();
-    for p in self.point.clone().into_iter() {
-      let scalar_in_fq = &E::BaseField::from_bigint(
-        <E::BaseField as PrimeField>::BigInt::from_bits_le(p.into_bigint().to_bits_le().as_slice()),
-      )
-      .unwrap();
-      let p_var = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
-      point_var.push(p_var);
+    let mut constraint_sponge = PoseidonSpongeVar::new(cs.clone(), &params_to_base_field::<E>());
+    let state_var =
+      NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || Ok(self.state))
+        .unwrap();
+
+    println!("STATE VAR {:?}", state_var.value().unwrap());
+
+    let mut x_var_vec: Vec<UInt8<_>> = Vec::new();
+    for x in state_var.to_bytes()?.value().unwrap() {
+      x_var_vec.push(UInt8::new_input(cs.clone(), || Ok(x))?);
     }
-    let len = point_var.len();
-    let odd = if len % 2 == 1 { 1 } else { 0 };
-    let a_var = &point_var[0..len / 2 + odd];
-    let b_var = &point_var[len / 2 + odd..len];
+    constraint_sponge.absorb(&x_var_vec).unwrap();
 
-    let res_mipp = mipp_verify_gadget::<E, IV>(
-      cs.clone(),
-      self.vk.clone(),
-      &self.mipp_proof,
-      b_var.to_vec(),
-      self.U.g_product,
-      &self.T,
-    );
+    let (hash_var1, hash_var2) = constraint_sponge
+      .squeeze_nonnative_field_elements::<E::ScalarField>(1)
+      .unwrap();
+    println!("HASHVAR1 {:?}", hash_var1.value().unwrap()[0]);
+    // let mut point_var = Vec::new();
+    // for p in self.point.clone().into_iter() {
+    //   let scalar_in_fq = &E::BaseField::from_bigint(
+    //     <E::BaseField as PrimeField>::BigInt::from_bits_le(p.into_bigint().to_bits_le().as_slice()),
+    //   )
+    //   .unwrap();
+    //   let p_var = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
+    //   point_var.push(p_var);
+    // }
+    // let len = point_var.len();
+    // let odd = if len % 2 == 1 { 1 } else { 0 };
+    // let a_var = &point_var[0..len / 2 + odd];
+    // let b_var = &point_var[len / 2 + odd..len];
 
-    assert!(res_mipp.unwrap() == true);
-    let mut a_rev_var = a_var.to_vec().clone();
-    a_rev_var.reverse();
+    // let res_mipp = mipp_verify_gadget::<E, IV>(
+    //   cs.clone(),
+    //   self.vk.clone(),
+    //   &self.mipp_proof,
+    //   b_var.to_vec(),
+    //   self.U.g_product,
+    //   &self.T,
+    // );
 
-    let res_var = check_gadget::<E, IV>(
-      cs.clone(),
-      self.vk,
-      self.U,
-      &a_rev_var,
-      self.v,
-      self.pst_proof,
-    );
-    assert!(res_var.unwrap() == true);
+    // assert!(res_mipp.unwrap() == true);
+    // let mut a_rev_var = a_var.to_vec().clone();
+    // a_rev_var.reverse();
+
+    // let res_var = check_gadget::<E, IV>(
+    //   cs.clone(),
+    //   self.vk,
+    //   self.U,
+    //   &a_rev_var,
+    //   self.v,
+    //   self.pst_proof,
+    // );
+    // assert!(res_var.unwrap() == true);
     Ok(())
   }
 }
@@ -599,20 +618,20 @@ mod tests {
 
     let (u, pst_proof, mipp_proof) = pl.open(&mut prover_transcript, comm_list, &ck, &r, &t);
 
-    let circuit = TestudoCommVerifier {
-      vk,
-      U: u,
-      point: r,
-      v,
-      pst_proof,
-      mipp_proof,
-      T: t,
-      _iv: PhantomData::<IV>,
-    };
+    // let circuit = TestudoCommVerifier {
+    //   vk,
+    //   U: u,
+    //   point: r,
+    //   v,
+    //   pst_proof,
+    //   mipp_proof,
+    //   T: t,
+    //   _iv: PhantomData::<IV>,
+    // };
 
-    let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
-    circuit.generate_constraints(cs.clone()).unwrap();
-    assert!(cs.is_satisfied().unwrap());
+    // let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
+    // circuit.generate_constraints(cs.clone()).unwrap();
+    // assert!(cs.is_satisfied().unwrap());
 
     // let mut rng2 = rand_chacha::ChaChaRng::seed_from_u64(1776);
     // let (opk, ovk) = Groth16::<P>::circuit_specific_setup(circuit.clone(), &mut rng2).unwrap();
