@@ -54,7 +54,7 @@ where
     // // )
     // // .unwrap();
 
-    // let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.scalar))?;
+    let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.scalar))?;
 
     // //let scalar_var_fq = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
     // // println!("SCALAR VAR");
@@ -112,16 +112,20 @@ where
     //   .unwrap();
     // println!("HASHVAR1 {:?}", hash_var1.value().unwrap()[0]);
 
-    let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
-    let cv = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_witness(cs.clone(), || {
-      Ok(self.scalar.clone())
-    })?;
-    println!("Scalar {:?}", cv.value().unwrap());
-    println!("CF {:?}", cv.to_constraint_field()?.value().unwrap());
-    sponge.absorb(&cv.to_constraint_field()?);
-    let hash = sponge.squeeze_nonnative_field_elements::<E::ScalarField>(1)?;
+    // let scalar_in_fq = &E::BaseField::from_bigint(
+    //   <E::BaseField as PrimeField>::BigInt::from_bits_le(self.scalar.into_bigint().to_bits_le().as_slice()),
+    // )
+    // .unwrap();
 
-    println!("hash {:?}", hash.0.value().unwrap());
+    // let p = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
+    let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
+   
+    println!("Scalar {:?}", scalar_var.value().unwrap());
+
+    sponge.absorb(&scalar_var.to_bytes().unwrap());
+    let hash = sponge.squeeze_nonnative_field_elements::<E::ScalarField>(1);
+
+    println!("hash {:?}", hash.unwrap().0.value().unwrap());
     // Fp256(BigInteger256([10577417867063568331, 11078737230088386683, 15679987742376005790, 1112270844950899640]))]
     Ok(())
   }
@@ -143,13 +147,13 @@ mod tests {
   use ark_relations::r1cs::ConstraintSystem;
   use ark_std::test_rng;
   use ark_std::UniformRand;
+
   #[test]
   fn absorb_test() {
     let mut rng = test_rng();
     let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
 
-    let params = poseidon_params();
-
+    let params = get_bls12377_fq_params();
     let mut native_sponge = PoseidonTranscript::new(&params);
     let mut rng = ark_std::test_rng();
     //let point = ark_bls12_377::G1Affine::rand(&mut rng);
@@ -160,29 +164,18 @@ mod tests {
 
     native_sponge.append(b"U", &scalar);
 
-    let hash: ark_bls12_377::Fr = native_sponge.challenge_scalar(b"random_point");
+    let hash = native_sponge.challenge_scalar::<ark_bls12_377::Fr>(b"random_point");
 
     println!("HASH: ");
     println!("{:?}", hash);
 
     let circuit: TestudoCommVerifier<I, IV> = TestudoCommVerifier {
-      scalar,
+      scalar: ark_bls12_377::Fr::from(5 as u8),
       poseidon_params: get_bls12377_fq_params(),
       _iv: PhantomData,
     };
 
     circuit.generate_constraints(cs.clone()).unwrap();
     assert!(cs.is_satisfied().unwrap());
-
-    let params = get_bls12377_fq_params();
-
-    let mut native_sponge2 = PoseidonTranscript::new(&params);
-
-    native_sponge2.append(b"U", &scalar);
-
-    let hash2: ark_bls12_377::Fr = native_sponge2.challenge_scalar(b"random_point");
-
-    println!("HASH2: ");
-    println!("{:?}", hash2);
   }
 }
