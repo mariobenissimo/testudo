@@ -29,7 +29,7 @@ pub struct MippProof<E: Pairing> {
 
 impl<E: Pairing> MippProof<E> {
   pub fn prove(
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    transcript: &mut PoseidonTranscript<E::BaseField>,
     ck: &CommitterKey<E>,
     a: Vec<E::G1Affine>,
     y: Vec<E::ScalarField>,
@@ -181,7 +181,7 @@ impl<E: Pairing> MippProof<E> {
 
   pub fn verify(
     vk: &VerifierKey<E>,
-    transcript: &mut PoseidonTranscript<E::ScalarField>,
+    transcript: &mut PoseidonTranscript<E::BaseField>,
     proof: &MippProof<E>,
     point: Vec<E::ScalarField>,
     U: &E::G1Affine,
@@ -199,6 +199,7 @@ impl<E: Pairing> MippProof<E> {
       uc: U.into_group(),
     };
 
+    println!("VER - Prima absorb: {:?}",U);
     transcript.append(b"U", U);
 
     // Challenges need to be generated first in sequential order so the
@@ -213,6 +214,7 @@ impl<E: Pairing> MippProof<E> {
       transcript.append(b"comm_t_l", comm_t_l);
       transcript.append(b"comm_t_r", comm_t_r);
       let c_inv = transcript.challenge_scalar::<E::ScalarField>(b"challenge_i");
+      println!("NAIV SQUEEZY: {:?}", c_inv);
       let c = c_inv.inverse().unwrap();
 
       xs.push(c);
