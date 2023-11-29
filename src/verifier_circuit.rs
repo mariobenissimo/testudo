@@ -137,8 +137,6 @@
 //     ]);
 //     // self.transcript.new_from_state(self.r1cs_proof.transcript_sat_state);
 
-
-
 //     let proof_gadget = <Groth16VerifierGadget<E, IV> as SNARKGadget<E::ScalarField,BasePrimeField<E>,Groth16<E>>>::ProofVar::new_witness(cs.clone(), || Ok(self.r1cs_proof.circuit_proof)).unwrap();
 //     let vk_gadget = <Groth16VerifierGadget<E, IV> as SNARKGadget<E::ScalarField,BasePrimeField<E>,Groth16<E>>>::VerifyingKeyVar::new_witness(cs.clone(), || Ok(self.gens.gens_gc.vk.clone())).unwrap();
 
@@ -349,7 +347,6 @@
 //   left.enforce_equal(&right).unwrap();
 //   Ok(true)
 // }
-
 
 // fn mipp_verify_gadget_final<E: Pairing, IV: PairingVar<E,BasePrimeField<E>>>(
 //   cs: ConstraintSystemRef<BasePrimeField<E>>,

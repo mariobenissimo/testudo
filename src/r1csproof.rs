@@ -500,7 +500,7 @@
 //   type F = ark_bls12_377::Fr;
 //   use crate::rand::SeedableRng;
 //   use ark_relations::r1cs::ConstraintSynthesizer;
-  
+
 //   fn produce_tiny_r1cs() -> (R1CSInstance<F>, Vec<F>, Vec<F>) {
 //     // three constraints over five variables Z1, Z2, Z3, Z4, and Z5
 //     // rounded to the nearest power of two
@@ -644,7 +644,6 @@
 //     // circuit.generate_constraints(cs.clone());
 //     //       // .unwrap();
 //     // assert!(cs.is_satisfied().unwrap());
-
 
 //   }
 // }

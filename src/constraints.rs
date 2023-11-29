@@ -1,10 +1,10 @@
-use std::borrow::Borrow;
-use ark_ec::pairing::Pairing;
 use crate::{
   math::Math,
   sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
   unipoly::UniPoly,
 };
+use ark_ec::pairing::Pairing;
+use std::borrow::Borrow;
 
 use ark_ff::PrimeField;
 

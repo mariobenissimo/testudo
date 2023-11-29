@@ -7,6 +7,7 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, CryptographicSponge};
 use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::BigInteger;
 use ark_ff::PrimeField;
 use ark_r1cs_std::fields::nonnative::NonNativeFieldVar;
@@ -18,7 +19,6 @@ use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 use poseidon_parameters::PoseidonParameters;
 use std::marker::PhantomData;
-use ark_ec::CurveGroup;
 struct TestudoCommVerifier<E, IV>
 where
   E: Pairing,
@@ -55,7 +55,6 @@ where
     // // .unwrap();
 
     let g1_var = IV::G1Var::new_input(cs.clone(), || Ok(self.g1))?;
-
 
     //let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.g1))?;
 
@@ -122,11 +121,14 @@ where
 
     // let p = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
     let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
-   
+
     println!("g1 {:?}", g1_var.value().unwrap().into_affine());
 
     let mut buf3 = Vec::new();
-    g1_var.value().unwrap().into_affine()
+    g1_var
+      .value()
+      .unwrap()
+      .into_affine()
       .serialize_with_mode(&mut buf3, Compress::No)
       .expect("serialization failed");
 

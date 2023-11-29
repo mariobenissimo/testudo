@@ -54,7 +54,10 @@ where
     // // )
     // // .unwrap();
 
-    let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.scalar))?;
+    let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(
+      ark_relations::ns!(cs, "resi"),
+      || Ok(self.scalar),
+    )?;
 
     // //let scalar_var_fq = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
     // // println!("SCALAR VAR");
@@ -119,7 +122,7 @@ where
 
     // let p = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
     let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
-   
+
     println!("Scalar {:?}", scalar_var.value().unwrap());
 
     sponge.absorb(&scalar_var.to_bytes().unwrap());

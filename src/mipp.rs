@@ -199,7 +199,7 @@ impl<E: Pairing> MippProof<E> {
       uc: U.into_group(),
     };
 
-    println!("VER - Prima absorb: {:?}",U);
+    println!("VER - Prima absorb: {:?}", U);
     transcript.append(b"U", U);
 
     // Challenges need to be generated first in sequential order so the
@@ -225,6 +225,8 @@ impl<E: Pairing> MippProof<E> {
       // doesn't bring much improvement
       final_y *= E::ScalarField::one() + c_inv.mul(point[i]) - point[i];
     }
+
+    println!("NAIVE FINAL_Y: {:?}", final_y);
 
     // First, each entry of T and U are multiplied independently by their
     // respective challenges which is done in parralel and, at the end,
@@ -282,6 +284,11 @@ impl<E: Pairing> MippProof<E> {
       rs.push(r);
     }
 
+    println!("NAIVE RS ");
+    for x in rs.clone() {
+      println!("{:?}", x);
+    }
+
     // Given p_h is structured as defined above, the verifier can compute
     // p_h(rs) by themselves in O(m) time
     let v = (0..m)
@@ -293,8 +300,6 @@ impl<E: Pairing> MippProof<E> {
       nv: m,
       h_product: proof.final_h,
     };
-
-    println!("RS VERIFIER {:?}",rs);
 
     // final_h is the commitment of p_h so the verifier can perform
     // a PST verification at the random point rs, given the pst proof

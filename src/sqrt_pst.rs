@@ -267,7 +267,7 @@ impl<E: Pairing> Polynomial<E> {
 #[cfg(test)]
 mod tests {
 
-  use crate::parameters::{poseidon_params, get_bls12377_fq_params};
+  use crate::parameters::{get_bls12377_fq_params, poseidon_params};
 
   use super::*;
   type F = ark_bls12_377::Fr;

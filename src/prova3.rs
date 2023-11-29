@@ -7,6 +7,7 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, CryptographicSponge};
 use ark_ec::pairing::{Pairing, PairingOutput};
+use ark_ec::CurveGroup;
 use ark_ff::BigInteger;
 use ark_ff::PrimeField;
 use ark_r1cs_std::fields::nonnative::NonNativeFieldVar;
@@ -18,7 +19,6 @@ use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 use poseidon_parameters::PoseidonParameters;
 use std::marker::PhantomData;
-use ark_ec::CurveGroup;
 struct TestudoCommVerifier<E, IV>
 where
   E: Pairing,
@@ -56,7 +56,6 @@ where
     // // .unwrap();
 
     let gt_var = IV::GTVar::new_input(cs.clone(), || Ok(self.gt.0))?;
-
 
     //let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.g1))?;
 
@@ -123,13 +122,13 @@ where
 
     // let p = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
     let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
-   
+
     println!("gt {:?}", gt_var.value().unwrap());
 
     let mut buf3 = Vec::new();
     gt_var
-    .value()
-    .unwrap()
+      .value()
+      .unwrap()
       .serialize_with_mode(&mut buf3, Compress::No)
       .expect("serialization failed");
 
@@ -176,7 +175,6 @@ mod tests {
     let b = ark_ec::bls12::G2Prepared::default();
     let gt = ark_bls12_377::Bls12_377::pairing(a, b);
 
-
     println!("GT ");
     println!("{:?}", gt);
 
@@ -197,7 +195,6 @@ mod tests {
     assert!(cs.is_satisfied().unwrap());
   }
 }
-
 
 // use crate::parameters::params_to_base_field;
 // use crate::poseidon_transcript::PoseidonTranscript;
@@ -247,7 +244,6 @@ mod tests {
 //     mut self,
 //     cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
 //   ) -> Result<(), SynthesisError> {
-   
 
 //     // let hash_in_fq = &E::BaseField::from_bigint(
 //     //   <E::BaseField as PrimeField>::BigInt::from_bits_le(self.hash.into_bigint().to_bits_le().as_slice()),
@@ -259,13 +255,11 @@ mod tests {
 //     println!("REAL HASH VAR");
 //     println!("{:?}", real_hash_var.value().unwrap());
 
-    
 //     // let scalar_in_fq = &E::BaseField::from_bigint(
 //     //   <E::BaseField as PrimeField>::BigInt::from_bits_le(self.scalar.into_bigint().to_bits_le().as_slice()),
 //     // )
 //     // .unwrap();
 
-  
 //     let gt_var = IV::GTVar::new_input(cs.clone(), || Ok(self.gt.0))?;
 
 //     // let x = self.g1.x().unwrap();
@@ -274,8 +268,6 @@ mod tests {
 //     // let x_var = FpVar::new_input(cs.clone(), || Ok(x))?;
 
 //     // let y_var = FpVar::new_input(cs.clone(), || Ok(y))?;
-
-
 
 //     //let scalar_var_fq = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
 //     // println!("x");
@@ -297,7 +289,7 @@ mod tests {
 
 //     println!("G1 BYTES");
 //     println!("{:?}", buf3);
-    
+
 //     let mut x_var_vec: Vec<UInt8<_>> = Vec::new();
 //     for x in buf3 {
 //       x_var_vec.push(UInt8::new_input(cs.clone(), || Ok(x))?);
@@ -361,7 +353,6 @@ mod tests {
 //     let mut rng = ark_std::test_rng();
 //     //let point = ark_bls12_377::G1Affine::rand(&mut rng);
 //     let g1 = ark_bls12_377::G1Affine::rand(&mut rng);
-
 
 //     let a = ark_ec::bls12::G1Prepared::default();
 //     let b = ark_ec::bls12::G2Prepared::default();
