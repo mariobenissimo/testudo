@@ -43,6 +43,8 @@ use std::ops::Mul;
 use std::ops::MulAssign;
 use std::{borrow::Borrow, marker::PhantomData};
 
+type BasePrimeField<E> = <<<E as Pairing>::G1 as CurveGroup>::BaseField as Field>::BasePrimeField;
+
 struct MippTUVar<E, IV>
 where
   E: Pairing,
@@ -267,7 +269,10 @@ where
     <E::BaseField as PrimeField>::BigInt::from_bits_le(value.into_bigint().to_bits_le().as_slice()),
   )
   .unwrap();
-  let value_var = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
+  //let value_var = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
+
+  let value_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || Ok(value))?;
+
   // allocate proof
   let mut proofs_var = Vec::new();
   for proof in proof.proofs.clone().into_iter() {
@@ -289,8 +294,8 @@ where
 
   //computing other part of the circuit
   let pairing_lefts_var: Vec<_> = (0..vk.nv)
-            .map(|i| vk_gmask_var[i].clone() - res_var[i].clone()) //.map(|i| vk_gmask_var[i].clone() - g_mul_var[i].clone())
-            .collect();
+    .map(|i| vk_gmask_var[i].clone() - res_var[i].clone()) //.map(|i| vk_gmask_var[i].clone() - g_mul_var[i].clone())
+    .collect();
 
   let mut pairing_lefts_prep = Vec::new();
   for var in pairing_lefts_var.clone().into_iter() {
