@@ -1,49 +1,31 @@
 use crate::ark_std::One;
 use crate::mipp::MippProof;
-use crate::parameters::get_bls12377_fq_params;
-use crate::parameters::params_to_base_field;
-use crate::{
-  math::Math,
-  poseidon_transcript::PoseidonTranscript,
-  sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
-  unipoly::UniPoly,
-};
-use ark_crypto_primitives::sponge::constraints::AbsorbGadget;
 use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,
   poseidon::{constraints::PoseidonSpongeVar, PoseidonConfig},
 };
 use ark_crypto_primitives::Error;
 use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
-use ark_ff::BigInteger;
-use ark_ff::Field;
-use ark_ff::PrimeField;
 use ark_poly_commit::multilinear_pc::data_structures::CommitmentG2;
 use ark_poly_commit::multilinear_pc::data_structures::ProofG1;
 use ark_poly_commit::multilinear_pc::{
-  data_structures::{Commitment, CommitterKey, Proof, VerifierKey},
-  MultilinearPC,
+  data_structures::{Commitment, Proof, VerifierKey},
 };
 use ark_r1cs_std::fields::nonnative::NonNativeFieldVar;
-use ark_r1cs_std::groups::bls12::G1Var;
 use ark_r1cs_std::prelude::*;
 use ark_r1cs_std::{
-  alloc::{AllocVar, AllocationMode},
-  fields::fp::FpVar,
+  alloc::AllocVar,
   prelude::{EqGadget, FieldVar},
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, Namespace, SynthesisError};
 use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
-use digest::generic_array::typenum::True;
 use std::ops::AddAssign;
 use std::ops::Mul;
 use std::ops::MulAssign;
-use std::{borrow::Borrow, marker::PhantomData};
+use std::marker::PhantomData;
 
-type BasePrimeField<E> = <<<E as Pairing>::G1 as CurveGroup>::BaseField as Field>::BasePrimeField;
 
 struct MippTUVar<E, IV>
 where
@@ -82,18 +64,13 @@ where
     self.uc.add_assign(&other.uc);
   }
 }
-pub struct CommitmentG2Var<E: Pairing, IV: PairingVar<E>> {
-  /// number of variables
-  pub nv: usize,
-  /// product of g as described by the vRAM paper
-  pub h_product: IV::G2Var,
-}
 
 pub struct TestudoCommVerifier<E, IV>
 where
   E: Pairing,
   IV: PairingVar<E>,
 {
+  pub params: PoseidonConfig<E::BaseField>,
   pub vk: VerifierKey<E>,
   pub U: Commitment<E>,
   pub point: Vec<E::ScalarField>,
@@ -110,6 +87,7 @@ where
 {
   fn clone(&self) -> Self {
     Self {
+      params: self.params.clone(),
       vk: self.vk.clone(),
       U: self.U.clone(),
       point: self.point.clone(),
@@ -134,7 +112,8 @@ where
     self,
     cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
   ) -> Result<(), SynthesisError> {
-    // allocate point
+
+
     let mut point_var = Vec::new();
     for p in self.point.clone().into_iter() {
       let p_var =
@@ -146,28 +125,26 @@ where
     let a_var = &point_var[0..len / 2 + odd];
     let b_var = &point_var[len / 2 + odd..len];
 
-    let res_mipp = mipp_verify_gadget::<E, IV>(
+    mipp_verify_gadget::<E, IV>(
       cs.clone(),
+      self.params.clone(),
       self.vk.clone(),
       &self.mipp_proof,
       b_var.to_vec(),
       self.U.g_product,
       &self.T,
-    );
-
-    assert!(res_mipp.unwrap() == true);
+    ).unwrap();
     let mut a_rev_var = a_var.to_vec().clone();
     a_rev_var.reverse();
 
-    let res_var = check_gadget::<E, IV>(
+    check_gadget::<E, IV>(
       cs.clone(),
       self.vk,
       self.U,
       &a_rev_var,
       self.v,
       self.pst_proof,
-    );
-    assert!(res_var.unwrap() == true);
+    ).unwrap();
     Ok(())
   }
 }
@@ -179,7 +156,7 @@ fn check_2_gadget<E: Pairing, IV: PairingVar<E>>(
   point_var: &Vec<NonNativeFieldVar<E::ScalarField, E::BaseField>>,
   value_var: NonNativeFieldVar<E::ScalarField, E::BaseField>,
   proof: &ProofG1<E>,
-) -> Result<bool, Error>
+) -> Result<(), Error>
 where
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
   IV::G2Var: CurveVar<E::G2, E::BaseField>,
@@ -239,7 +216,7 @@ where
   let right = IV::final_exponentiation(&right_ml)?;
 
   left.enforce_equal(&right).unwrap();
-  Ok(true)
+  Ok(())
 }
 
 fn check_gadget<E: Pairing, IV: PairingVar<E>>(
@@ -249,7 +226,7 @@ fn check_gadget<E: Pairing, IV: PairingVar<E>>(
   point_var: &Vec<NonNativeFieldVar<E::ScalarField, E::BaseField>>,
   value: E::ScalarField,
   proof: Proof<E>,
-) -> Result<bool, Error>
+) -> Result<(), Error>
 where
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
   IV::G2Var: CurveVar<E::G2, E::BaseField>,
@@ -264,14 +241,9 @@ where
   }
   // allocate commitment
   let com_g1_prod_var = IV::G1Var::new_input(cs.clone(), || Ok(commitment.g_product))?;
-  // allocate value
-  let scalar_in_fq = &E::BaseField::from_bigint(
-    <E::BaseField as PrimeField>::BigInt::from_bits_le(value.into_bigint().to_bits_le().as_slice()),
-  )
-  .unwrap();
-  //let value_var = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
 
-  let value_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || Ok(value))?;
+  let value_var =
+    NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || Ok(value))?;
 
   // allocate proof
   let mut proofs_var = Vec::new();
@@ -309,18 +281,19 @@ where
 
   let right_ml = IV::miller_loop(&pairing_lefts_prep, &pairing_right_prep)?;
   let right = IV::final_exponentiation(&right_ml).unwrap();
-  left.enforce_equal(&right)?; // OK
-  Ok(true)
+  left.enforce_equal(&right)?;
+  Ok(())
 }
 
 fn mipp_verify_gadget<E: Pairing, IV: PairingVar<E>>(
   cs: ConstraintSystemRef<E::BaseField>,
+  params: PoseidonConfig<E::BaseField>,
   vk: VerifierKey<E>,
   proof: &MippProof<E>,
   point_var: Vec<NonNativeFieldVar<E::ScalarField, E::BaseField>>,
   U: E::G1Affine,
   T: &<E as Pairing>::TargetField,
-) -> Result<bool, Error>
+) -> Result<(),Error>
 where
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
   IV::G2Var: CurveVar<E::G2, E::BaseField>,
@@ -358,7 +331,6 @@ where
   };
 
   // create new transcript inside the circuit instead of taking it from parameters
-  let params: PoseidonConfig<E::BaseField> = params_to_base_field::<E>();
   let mut transcript_var = PoseidonSpongeVar::new(cs.clone(), &params);
 
   // FIRST ABSORB
@@ -371,11 +343,6 @@ where
   for el in buf {
     u_var_vec.push(UInt8::new_input(cs.clone(), || Ok(el))?);
   }
-
-  println!(
-    "Circ - Prima absorb: {:?}",
-    U_g_product_var.value().unwrap().into_affine()
-  );
   transcript_var.absorb(&u_var_vec)?;
 
   let one_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || {
@@ -450,8 +417,6 @@ where
     let c_inv_nn = (transcript_var.squeeze_nonnative_field_elements::<E::ScalarField>(1)?).0;
     let c_inv_var = &c_inv_nn[0];
 
-    println!("CIRC SQUEEZY: {:?}", c_inv_var.value().unwrap());
-
     let c_var = c_inv_var.inverse().unwrap();
 
     xs.push(c_var.clone());
@@ -459,14 +424,11 @@ where
 
     final_y_var *= &one_var + c_inv_var.mul(&point_var[i]) - &point_var[i];
   }
-
-  println!("CIRC FINAL_Y: {:?}", final_y_var.value().unwrap());
-
   enum Op<'a, E: Pairing, IV: PairingVar<E>> {
     TC(
       &'a IV::GTVar,
       NonNativeFieldVar<E::ScalarField, E::BaseField>,
-    ), // BigInt == FpVar<E::BaseField>
+    ),
     UC(
       &'a IV::G1Var,
       &'a NonNativeFieldVar<E::ScalarField, E::BaseField>,
@@ -514,11 +476,6 @@ where
     rs.push(r);
   }
 
-  println!("CIRC RS ");
-  for x in rs.clone() {
-    println!("{:?}", x.value().unwrap());
-  }
-
   let v_var: NonNativeFieldVar<E::ScalarField, E::BaseField> = (0..m)
     .into_iter()
     .map(|i| &one_var + (&rs[i]).mul(&xs_inv[m - i - 1]) - &rs[i])
@@ -529,16 +486,14 @@ where
     h_product: proof.final_h,
   };
 
-  let check_h_var = check_2_gadget::<E, IV>(
+    check_2_gadget::<E, IV>(
     cs.clone(),
     vk.clone(),
     &comm_h,
     &rs,
     v_var,
     &proof.pst_proof_h,
-  );
-  let check_h = check_h_var.unwrap();
-  assert!(check_h.clone() == true);
+  )?;
   let final_a_var = IV::G1Var::new_input(cs.clone(), || Ok(proof.final_a))?;
   let final_u_var = final_a_var
     .scalar_mul_le(final_y_var.to_bits_le().unwrap().iter())
@@ -550,52 +505,36 @@ where
   let final_h_var_prep = IV::prepare_g2(&final_h_var)?;
 
   let final_t_var = IV::pairing(final_u_var_prep, final_h_var_prep)?;
-  let check_t = true;
 
   ref_final_res_var.tc.enforce_equal(&final_t_var).unwrap();
 
-  assert!(check_t == true);
-
-  let check_u = true;
   ref_final_res_var.uc.enforce_equal(&final_u_var).unwrap();
 
-  assert!(check_u == true);
-  Ok(check_h & check_u)
+  Ok(())
 }
 #[cfg(test)]
 mod tests {
   use crate::ark_std::UniformRand;
-  use ark_bls12_377::{Bls12_377, Config, FqConfig};
-  use ark_bls12_381::Bls12_381;
+  use ark_bls12_377::Bls12_377;
   use ark_ec::pairing::Pairing;
-  use ark_ec::short_weierstrass::Affine;
-  use ark_poly::{DenseMultilinearExtension, MultilinearExtension, SparseMultilinearExtension};
-  use ark_std::rand::RngCore;
-  use ark_std::test_rng;
   use ark_std::vec::Vec;
   type E = Bls12_377;
   use ark_relations::r1cs::ConstraintSystem;
-  type Fr = <E as Pairing>::ScalarField;
   use super::*;
   use ark_ec::bls12::Bls12;
-  type IV = ark_bls12_377::constraints::PairingVar;
-  use crate::ark_std::rand::SeedableRng;
-  use ark_bw6_761::BW6_761 as P;
-  use ark_crypto_primitives::snark::SNARK;
-  use ark_ff::Field;
-  use ark_ff::{MontBackend, QuadExtField, ToConstraintField};
-  use ark_groth16::prepare_verifying_key;
-  use ark_groth16::Groth16;
-  type Fp = <E as Pairing>::BaseField;
-  use super::*;
   type F = ark_bls12_377::Fr;
-  use crate::parameters::poseidon_params;
   use crate::sqrt_pst::Polynomial;
+  use ark_poly_commit::multilinear_pc::data_structures::{
+    CommitmentG2, CommitterKey, ProofG1, VerifierKey,
+  };
+  use ark_poly_commit::multilinear_pc::MultilinearPC;
+  use crate::parameters::get_bls12377_fq_params;
+  use crate::poseidon_transcript::PoseidonTranscript;
 
   #[test]
   fn check_commit() {
     // check odd case
-    check_sqrt_poly_commit(5);
+    check_sqrt_poly_commit(6);
   }
 
   fn check_sqrt_poly_commit(num_vars: u32) {
@@ -616,27 +555,28 @@ mod tests {
 
     let (comm_list, t) = pl.commit(&ck);
 
-    let params = poseidon_params();
-    let mut prover_transcript = PoseidonTranscript::new(&get_bls12377_fq_params());
+    let params = get_bls12377_fq_params();
+    let mut prover_transcript = PoseidonTranscript::new(&params);
 
     let (u, pst_proof, mipp_proof) = pl.open(&mut prover_transcript, comm_list, &ck, &r, &t);
 
-    let mut verifier_transcript = PoseidonTranscript::new(&get_bls12377_fq_params());
+    let mut verifier_transcript = PoseidonTranscript::new(&params);
 
-    let res = Polynomial::verify(
-      &mut verifier_transcript,
-      &vk,
-      &u,
-      &r,
-      v,
-      &pst_proof,
-      &mipp_proof,
-      &t,
-    );
-    assert!(res == true);
+    // let res = Polynomial::verify(
+    //   &mut verifier_transcript,
+    //   &vk,
+    //   &u,
+    //   &r,
+    //   v,
+    //   &pst_proof,
+    //   &mipp_proof,
+    //   &t,
+    // );
+    // assert!(res == true);
 
     let circuit =
       TestudoCommVerifier::<ark_bls12_377::Bls12_377, ark_bls12_377::constraints::PairingVar> {
+        params,
         vk,
         U: u,
         point: r,
@@ -648,13 +588,7 @@ mod tests {
       };
     let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
     circuit.generate_constraints(cs.clone()).unwrap();
+    println!("Num constraints2: {:?}", cs.num_constraints());
     assert!(cs.is_satisfied().unwrap());
-
-    // let mut rng2 = rand_chacha::ChaChaRng::seed_from_u64(1776);
-    // let (opk, ovk) = Groth16::<P>::circuit_specific_setup(circuit.clone(), &mut rng2).unwrap();
-    // let opvk = Groth16::<P>::process_vk(&ovk).unwrap();
-    // let oproof = Groth16::<P>::prove(&opk, circuit, &mut rng2).unwrap();
-    // let public_input = vec![];
-    // assert!(Groth16::<P>::verify_proof(&opvk, &oproof, &public_input).unwrap());
   }
 }

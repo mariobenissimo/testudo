@@ -30,10 +30,7 @@ impl<F: PrimeField> Transcript for PoseidonTranscript<F> {
   fn challenge_scalar<FF: PrimeField>(&mut self, _label: &'static [u8]) -> FF {
     self.sponge.squeeze_field_elements(1).remove(0)
   }
-
 }
-
-
 
 impl<F: PrimeField> PoseidonTranscript<F> {
   /// create a new transcript
@@ -51,15 +48,8 @@ impl<F: PrimeField + Absorb> PoseidonTranscript<F> {
     self.sponge = PoseidonSponge::new(&self.params.clone());
     self.append_scalar(b"", challenge);
   }
-
 }
 
-impl<F: PrimeField> PoseidonTranscript<F> {
-  pub fn new_from_state2<S: CanonicalSerialize>(&mut self, challenge: &S) {
-    self.sponge = PoseidonSponge::new(&self.params.clone());
-    self.append(b"", challenge);
-  }
-}
 
 impl<F: PrimeField> PoseidonTranscript<F> {
   pub fn append_u64(&mut self, _label: &'static [u8], x: u64) {
@@ -102,25 +92,6 @@ impl<F: PrimeField> PoseidonTranscript<F> {
     let mut bytes = Vec::new();
     g_t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
     self.append_bytes(b"", &bytes);
-  }
-
-  pub fn append_g1<E>(&mut self, _label: &'static [u8], g_t: &E::G1Affine)
-  where
-    E: Pairing,
-  {
-    let mut bytes = Vec::new();
-    g_t.serialize_with_mode(&mut bytes, Compress::Yes).unwrap();
-    self.append_bytes(b"", &bytes);
-  }
-  pub fn append_point_g1<G>(&mut self, _label: &'static [u8], point: &G)
-  where
-    G: CurveGroup,
-  {
-    let mut point_encoding = Vec::new();
-    point
-      .serialize_with_mode(&mut point_encoding, Compress::Yes)
-      .unwrap();
-    self.sponge.absorb(&point_encoding);
   }
 }
 

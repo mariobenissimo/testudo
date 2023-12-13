@@ -140,7 +140,6 @@ impl<E: Pairing> MippProof<E> {
       .map(|_| transcript.challenge_scalar::<E::ScalarField>(b"random_point"))
       .collect();
 
-    println!("RS PROVER {:?}", rs);
     let pst_proof_h = MultilinearPC::<E>::open_g1(ck, &poly, &rs);
 
     Ok(MippProof {
@@ -199,7 +198,6 @@ impl<E: Pairing> MippProof<E> {
       uc: U.into_group(),
     };
 
-    println!("VER - Prima absorb: {:?}", U);
     transcript.append(b"U", U);
 
     // Challenges need to be generated first in sequential order so the
@@ -214,7 +212,6 @@ impl<E: Pairing> MippProof<E> {
       transcript.append(b"comm_t_l", comm_t_l);
       transcript.append(b"comm_t_r", comm_t_r);
       let c_inv = transcript.challenge_scalar::<E::ScalarField>(b"challenge_i");
-      println!("NAIV SQUEEZY: {:?}", c_inv);
       let c = c_inv.inverse().unwrap();
 
       xs.push(c);
@@ -225,8 +222,6 @@ impl<E: Pairing> MippProof<E> {
       // doesn't bring much improvement
       final_y *= E::ScalarField::one() + c_inv.mul(point[i]) - point[i];
     }
-
-    println!("NAIVE FINAL_Y: {:?}", final_y);
 
     // First, each entry of T and U are multiplied independently by their
     // respective challenges which is done in parralel and, at the end,
@@ -283,12 +278,6 @@ impl<E: Pairing> MippProof<E> {
       let r = transcript.challenge_scalar::<E::ScalarField>(b"random_point");
       rs.push(r);
     }
-
-    println!("NAIVE RS ");
-    for x in rs.clone() {
-      println!("{:?}", x);
-    }
-
     // Given p_h is structured as defined above, the verifier can compute
     // p_h(rs) by themselves in O(m) time
     let v = (0..m)

@@ -1,12 +1,13 @@
+use ark_ec::pairing::Pairing;
+use std::borrow::Borrow;
+
 use crate::{
   math::Math,
   sparse_mlpoly::{SparsePolyEntry, SparsePolynomial},
   unipoly::UniPoly,
 };
-use ark_ec::pairing::Pairing;
-use std::borrow::Borrow;
 
-use ark_ff::{PrimeField, BigInt};
+use ark_ff::PrimeField;
 
 use ark_crypto_primitives::sponge::{
   constraints::CryptographicSpongeVar,
@@ -215,13 +216,13 @@ impl<F: PrimeField> SparsePolynomialVar<F> {
 }
 
 #[derive(Clone)]
-pub struct R1CSVerificationCircuit<F: PrimeField, E: Pairing> {
+pub struct R1CSVerificationCircuit<F: PrimeField> {
   pub num_vars: usize,
   pub num_cons: usize,
   pub input: Vec<F>,
   pub input_as_sparse_poly: SparsePolynomial<F>,
   pub evals: (F, F, F),
-  pub params: PoseidonConfig<E::BaseField>,
+  pub params: PoseidonConfig<F>,
   pub prev_challenge: F,
   pub claims_phase2: (F, F, F, F),
   pub eval_vars_at_ry: F,
@@ -233,7 +234,7 @@ pub struct R1CSVerificationCircuit<F: PrimeField, E: Pairing> {
   pub claimed_transcript_sat_state: F,
 }
 
-impl<F: PrimeField, P: Pairing> R1CSVerificationCircuit<F, P> {
+impl<F: PrimeField> R1CSVerificationCircuit<F> {
   pub fn new<E: Pairing<ScalarField = F>>(config: &VerifierConfig<E>) -> Self {
     Self {
       num_vars: config.num_vars,
@@ -259,7 +260,7 @@ impl<F: PrimeField, P: Pairing> R1CSVerificationCircuit<F, P> {
 }
 
 /// This section implements the sumcheck verification part of Spartan
-impl<F: PrimeField, P: Pairing> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F, P> {
+impl<F: PrimeField> ConstraintSynthesizer<F> for R1CSVerificationCircuit<F> {
   fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> ark_relations::r1cs::Result<()> {
     let initial_challenge_var = FpVar::<F>::new_input(cs.clone(), || Ok(self.prev_challenge))?;
     let mut transcript_var =
@@ -405,7 +406,7 @@ pub struct VerifierConfig<E: Pairing> {
   pub input: Vec<E::ScalarField>,
   pub input_as_sparse_poly: SparsePolynomial<E::ScalarField>,
   pub evals: (E::ScalarField, E::ScalarField, E::ScalarField),
-  pub params: PoseidonConfig<E::BaseField>,
+  pub params: PoseidonConfig<E::ScalarField>,
   pub prev_challenge: E::ScalarField,
   pub claims_phase2: (
     E::ScalarField,

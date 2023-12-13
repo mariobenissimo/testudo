@@ -7,7 +7,6 @@ use crate::transcript::Transcript;
 
 use super::unipoly::UniPoly;
 use ark_crypto_primitives::sponge::Absorb;
-use ark_ec::PairingFriendlyCycle;
 use ark_ff::PrimeField;
 
 use ark_serialize::*;

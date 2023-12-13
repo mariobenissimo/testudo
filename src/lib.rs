@@ -21,7 +21,7 @@ mod dense_mlpoly;
 mod errors;
 #[macro_use]
 pub(crate) mod macros;
-mod circuit_verifier;
+pub mod circuit_verifier;
 mod constraints;
 mod math;
 pub(crate) mod mipp;
@@ -29,9 +29,6 @@ mod nizk;
 pub mod parameters;
 pub mod poseidon_transcript;
 mod product_tree;
-mod prova;
-mod prova2;
-mod prova3;
 mod r1csinstance;
 mod r1csproof;
 mod sparse_mlpoly;
