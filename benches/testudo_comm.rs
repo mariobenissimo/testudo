@@ -21,8 +21,8 @@ struct BenchmarkResults {
 fn main() {
   let params = get_bls12377_fq_params();
 
-  let mut writer = csv::Writer::from_path("sqrt_pst.csv").expect("unable to open csv writer");
-  for &s in [4, 5, 20, 27].iter() {
+  let mut writer = csv::Writer::from_path("testudo_comm.csv").expect("unable to open csv writer");
+  for &s in [5, 10, 15, 20, 25].iter() {
     println!("Running for {} inputs", s);
     let mut rng = ark_std::test_rng();
     let mut br = BenchmarkResults::default();
@@ -51,7 +51,7 @@ fn main() {
 
     let circuit =
       TestudoCommVerifier::<ark_bls12_377::Bls12_377, ark_bls12_377::constraints::PairingVar> {
-        &get_bls12377_fq_params(),
+        params: get_bls12377_fq_params(),
         vk,
         U: u,
         point: r,
@@ -65,6 +65,7 @@ fn main() {
     circuit.generate_constraints(cs.clone()).unwrap();
     assert!(cs.is_satisfied().unwrap());
     br.num_constraints =  cs.num_constraints();
+
 
     writer
       .serialize(br)
