@@ -24,20 +24,20 @@ where
   E: Pairing,
   IV: PairingVar<E>,
 {
-  scalar: E::ScalarField,
+  g1: E::G1,
   poseidon_params: PoseidonConfig<E::BaseField>,
   _iv: PhantomData<IV>,
 }
 
-impl<E, IV> ConstraintSynthesizer<<E as Pairing>::BaseField> for TestudoCommVerifier<E, IV>
+impl<E, IV> ConstraintSynthesizer<<E as Pairing>::ScalarField> for TestudoCommVerifier<E, IV>
 where
   E: Pairing,
   IV: PairingVar<E>,
-  IV::G1Var: CurveVar<E::G1, E::BaseField>,
 {
+  // CurveVar<Projective<Config>, Fp<MontBackend<FrConfig, 4>, 4>>
   fn generate_constraints(
     mut self,
-    cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
+    cs: ConstraintSystemRef<<E as Pairing>::ScalarField>,
   ) -> Result<(), SynthesisError> {
     // let hash_in_fq = &E::BaseField::from_bigint(
     //   <E::BaseField as PrimeField>::BigInt::from_bits_le(self.hash.into_bigint().to_bits_le().as_slice()),
@@ -45,6 +45,8 @@ where
     // .unwrap();
 
     // let real_hash_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.hash)).unwrap();
+
+    // posso fare da scalare a Base field ma il viceversa?
 
     // println!("REAL HASH VAR");
     // println!("{:?}", real_hash_var.value().unwrap());
@@ -54,11 +56,12 @@ where
     // // )
     // // .unwrap();
 
-    let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(
-      ark_relations::ns!(cs, "resi"),
-      || Ok(self.scalar),
-    )?;
+    // let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(
+    //   ark_relations::ns!(cs, "resi"),
+    //   || Ok(self.scalar),
+    // )?;
 
+    //let g1_var = IV::G1Var::new_input(cs.clone(), || Ok(self.g1))?;
     // //let scalar_var_fq = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
     // // println!("SCALAR VAR");
     // // println!("{:?}", scalar_var.value().unwrap());
@@ -121,14 +124,14 @@ where
     // .unwrap();
 
     // let p = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
-    let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
+    // let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
 
-    println!("Scalar {:?}", scalar_var.value().unwrap());
+    // println!("Scalar {:?}", scalar_var.value().unwrap());
 
-    sponge.absorb(&scalar_var.to_bytes().unwrap());
-    let hash = sponge.squeeze_nonnative_field_elements::<E::ScalarField>(1);
+    // sponge.absorb(&scalar_var.to_bytes().unwrap());
+    // let hash = sponge.squeeze_nonnative_field_elements::<E::ScalarField>(1);
 
-    println!("hash {:?}", hash.unwrap().0.value().unwrap());
+    // println!("hash {:?}", hash.unwrap().0.value().unwrap());
     // Fp256(BigInteger256([10577417867063568331, 11078737230088386683, 15679987742376005790, 1112270844950899640]))]
     Ok(())
   }
@@ -146,6 +149,8 @@ mod tests {
   use ark_crypto_primitives::sponge::poseidon::constraints::PoseidonSpongeVar;
   use ark_ec::bls12::Bls12;
   use ark_ec::pairing::Pairing;
+  use ark_ec::AffineRepr;
+  use ark_ec::Group;
   use ark_ff::{BigInteger, PrimeField};
   use ark_relations::r1cs::ConstraintSystem;
   use ark_std::test_rng;
@@ -154,7 +159,7 @@ mod tests {
   #[test]
   fn absorb_test() {
     let mut rng = test_rng();
-    let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
+    let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::ScalarField>::new_ref();
 
     let params = get_bls12377_fq_params();
     let mut native_sponge = PoseidonTranscript::new(&params);
@@ -172,8 +177,11 @@ mod tests {
     println!("HASH: ");
     println!("{:?}", hash);
 
-    let circuit: TestudoCommVerifier<I, IV> = TestudoCommVerifier {
-      scalar: ark_bls12_377::Fr::from(5 as u8),
+    let circuit: TestudoCommVerifier<
+      ark_bls12_377::Bls12_377,
+      ark_bls12_377::constraints::PairingVar,
+    > = TestudoCommVerifier {
+      g1: ark_bls12_377::g1::G1Projective::generator(),
       poseidon_params: get_bls12377_fq_params(),
       _iv: PhantomData,
     };
