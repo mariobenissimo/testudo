@@ -117,7 +117,7 @@ where
     let mut point_var = Vec::new();
     for p in self.point.clone().into_iter() {
       let p_var =
-        NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || Ok(p))?;
+        NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_witness(cs.clone(), || Ok(p))?;
       point_var.push(p_var);
     }
     let len = point_var.len();
@@ -162,15 +162,15 @@ where
   IV::G2Var: CurveVar<E::G2, E::BaseField>,
   IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
 {
-  let vk_g_var = IV::G1Var::new_input(cs.clone(), || Ok(vk.g))?;
-  let vk_h_var = IV::G2Var::new_input(cs.clone(), || Ok(vk.h))?;
+  let vk_g_var = IV::G1Var::new_witness(cs.clone(), || Ok(vk.g))?;
+  let vk_h_var = IV::G2Var::new_witness(cs.clone(), || Ok(vk.h))?;
   let mut vk_gmask_var = Vec::new();
   for g_mask in vk.g_mask_random.clone().into_iter() {
-    let g_mask_var = IV::G1Var::new_input(cs.clone(), || Ok(g_mask))?;
+    let g_mask_var = IV::G1Var::new_witness(cs.clone(), || Ok(g_mask))?;
     vk_gmask_var.push(g_mask_var);
   }
   // allocate commitment
-  let com_h_prod_var = IV::G2Var::new_input(cs.clone(), || Ok(commitment.h_product))?;
+  let com_h_prod_var = IV::G2Var::new_witness(cs.clone(), || Ok(commitment.h_product))?;
 
   let pair_right_op = com_h_prod_var
     - (vk_h_var
@@ -191,7 +191,7 @@ where
   let h_mask_random = vk.h_mask_random[vk.nv - point_var.len()..].to_vec();
   let mut h_mask_random_var = Vec::new();
   for h_mask in h_mask_random.clone().into_iter() {
-    let h_mask_var = IV::G2Var::new_input(cs.clone(), || Ok(h_mask))?;
+    let h_mask_var = IV::G2Var::new_witness(cs.clone(), || Ok(h_mask))?;
     h_mask_random_var.push(h_mask_var);
   }
   let pairing_rights_var: Vec<_> = (0..point_var.len())
@@ -204,7 +204,7 @@ where
     .collect();
   let mut proofs_var = Vec::new();
   for p in proof.proofs.clone().into_iter() {
-    let proof_var = IV::G1Var::new_input(cs.clone(), || Ok(p))?;
+    let proof_var = IV::G1Var::new_witness(cs.clone(), || Ok(p))?;
     proofs_var.push(proof_var);
   }
   let pairing_lefts_var: Vec<IV::G1PreparedVar> = proofs_var
@@ -232,18 +232,18 @@ where
   IV::G2Var: CurveVar<E::G2, E::BaseField>,
   IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
 {
-  let vk_g_var = IV::G1Var::new_input(cs.clone(), || Ok(vk.g))?;
-  let vk_h_var = IV::G2Var::new_input(cs.clone(), || Ok(vk.h))?;
+  let vk_g_var = IV::G1Var::new_witness(cs.clone(), || Ok(vk.g))?;
+  let vk_h_var = IV::G2Var::new_witness(cs.clone(), || Ok(vk.h))?;
   let mut vk_gmask_var = Vec::new();
   for g_mask in vk.g_mask_random.clone().into_iter() {
-    let g_mask_var = IV::G1Var::new_input(cs.clone(), || Ok(g_mask))?;
+    let g_mask_var = IV::G1Var::new_witness(cs.clone(), || Ok(g_mask))?;
     vk_gmask_var.push(g_mask_var);
   }
   // allocate commitment
-  let com_g1_prod_var = IV::G1Var::new_input(cs.clone(), || Ok(commitment.g_product))?;
+  let com_g1_prod_var = IV::G1Var::new_witness(cs.clone(), || Ok(commitment.g_product))?;
 
   let value_var =
-    NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || Ok(value))?;
+    NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_witness(cs.clone(), || Ok(value))?;
 
   // allocate proof
   let mut proofs_var = Vec::new();
@@ -299,17 +299,19 @@ where
   IV::G2Var: CurveVar<E::G2, E::BaseField>,
   IV::GTVar: FieldVar<E::TargetField, E::BaseField>,
 {
+  let comms_u = proof.comms_u.clone();
+  let comms_t = proof.comms_t.clone();
   let mut comms_u_var = Vec::new();
   for (first, second) in proof.comms_u.clone().into_iter() {
-    let first_var = IV::G1Var::new_input(cs.clone(), || Ok(first))?;
-    let second_var = IV::G1Var::new_input(cs.clone(), || Ok(second))?;
+    let first_var = IV::G1Var::new_witness(cs.clone(), || Ok(first))?;
+    let second_var = IV::G1Var::new_witness(cs.clone(), || Ok(second))?;
     comms_u_var.push((first_var, second_var));
   }
   // allocate comms_t
   let mut comms_t_var = Vec::new();
   for (first, second) in proof.comms_t.clone().into_iter() {
-    let first_var = IV::GTVar::new_input(cs.clone(), || Ok(first))?;
-    let second_var = IV::GTVar::new_input(cs.clone(), || Ok(second))?;
+    let first_var = IV::GTVar::new_witness(cs.clone(), || Ok(first))?;
+    let second_var = IV::GTVar::new_witness(cs.clone(), || Ok(second))?;
     comms_t_var.push((first_var, second_var));
   }
 
@@ -321,9 +323,9 @@ where
     NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_witness(cs.clone(), || Ok(final_y))?;
 
   // start allocate T
-  let T_var = IV::GTVar::new_input(cs.clone(), || Ok(T))?;
+  let T_var = IV::GTVar::new_witness(cs.clone(), || Ok(T))?;
   // start allocate U.g_product
-  let U_g_product_var = IV::G1Var::new_input(cs.clone(), || Ok(U))?;
+  let U_g_product_var = IV::G1Var::new_witness(cs.clone(), || Ok(U))?;
 
   let mut final_res_var: MippTUVar<E, IV> = MippTUVar {
     tc: T_var.clone(),
@@ -341,74 +343,64 @@ where
 
   let mut u_var_vec: Vec<UInt8<_>> = Vec::new();
   for el in buf {
-    u_var_vec.push(UInt8::new_input(cs.clone(), || Ok(el))?);
+    u_var_vec.push(UInt8::new_witness(cs.clone(), || Ok(el))?);
   }
   transcript_var.absorb(&u_var_vec)?;
 
-  let one_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || {
+  let one_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_witness(cs.clone(), || {
     Ok(E::ScalarField::one())
   })?;
 
-  for (i, (comm_u, comm_t)) in comms_u_var.iter().zip(comms_t_var.iter()).enumerate() {
+  for (i, (comm_u, comm_t)) in comms_u.iter().zip(comms_t.iter()).enumerate() {
     let (comm_u_l, comm_u_r) = comm_u;
     let (comm_t_l, comm_t_r) = comm_t;
     // Fiat-Shamir challenge
     // ABSORB COMM_U_L
     let mut comm_u_l_buf = Vec::new();
     comm_u_l
-      .value()
-      .unwrap()
-      .into_affine()
       .serialize_with_mode(&mut comm_u_l_buf, Compress::No)
       .expect("serialization failed");
 
     let mut comm_u_l_var_bytes = Vec::new();
 
     for b in comm_u_l_buf {
-      comm_u_l_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+      comm_u_l_var_bytes.push(UInt8::new_witness(cs.clone(), || Ok(b))?);
     }
     transcript_var.absorb(&comm_u_l_var_bytes)?;
     // ABSORB COMM_U_R
     let mut comm_u_r_buf = Vec::new();
     comm_u_r
-      .value()
-      .unwrap()
-      .into_affine()
       .serialize_with_mode(&mut comm_u_r_buf, Compress::No)
       .expect("serialization failed");
 
     let mut comm_u_r_var_bytes = Vec::new();
 
     for b in comm_u_r_buf {
-      comm_u_r_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+      comm_u_r_var_bytes.push(UInt8::new_witness(cs.clone(), || Ok(b))?);
     }
     transcript_var.absorb(&comm_u_r_var_bytes)?;
     // ABSORB COMM_T_L
     let mut comm_t_l_buf = Vec::new();
     comm_t_l
-      .value()
-      .unwrap()
       .serialize_with_mode(&mut comm_t_l_buf, Compress::No)
       .expect("serialization failed");
 
     let mut comm_t_l_var_bytes = Vec::new();
 
     for b in comm_t_l_buf {
-      comm_t_l_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+      comm_t_l_var_bytes.push(UInt8::new_witness(cs.clone(), || Ok(b))?);
     }
     transcript_var.absorb(&comm_t_l_var_bytes)?;
     // ABSORB COMM_T_R
     let mut comm_t_r_buf = Vec::new();
     comm_t_r
-      .value()
-      .unwrap()
       .serialize_with_mode(&mut comm_t_r_buf, Compress::No)
       .expect("serialization failed");
 
     let mut comm_t_r_var_bytes = Vec::new();
 
     for b in comm_t_r_buf {
-      comm_t_r_var_bytes.push(UInt8::new_input(cs.clone(), || Ok(b))?);
+      comm_t_r_var_bytes.push(UInt8::new_witness(cs.clone(), || Ok(b))?);
     }
 
     transcript_var.absorb(&comm_t_r_var_bytes)?;
@@ -494,12 +486,12 @@ where
     v_var,
     &proof.pst_proof_h,
   )?;
-  let final_a_var = IV::G1Var::new_input(cs.clone(), || Ok(proof.final_a))?;
+  let final_a_var = IV::G1Var::new_witness(cs.clone(), || Ok(proof.final_a))?;
   let final_u_var = final_a_var
     .scalar_mul_le(final_y_var.to_bits_le().unwrap().iter())
     .unwrap();
 
-  let final_h_var = IV::G2Var::new_input(cs.clone(), || Ok(proof.final_h))?;
+  let final_h_var = IV::G2Var::new_witness(cs.clone(), || Ok(proof.final_h))?;
 
   let final_u_var_prep = IV::prepare_g1(&final_a_var)?;
   let final_h_var_prep = IV::prepare_g2(&final_h_var)?;
@@ -530,6 +522,10 @@ mod tests {
   use ark_poly_commit::multilinear_pc::MultilinearPC;
   use crate::parameters::get_bls12377_fq_params;
   use crate::poseidon_transcript::PoseidonTranscript;
+  use ark_groth16::Groth16;
+  use crate::rand::SeedableRng;
+  use ark_crypto_primitives::snark::SNARK;
+  use rand::rngs::OsRng;
 
   #[test]
   fn check_commit() {
@@ -586,9 +582,16 @@ mod tests {
         T: t,
         _iv: PhantomData,
       };
-    let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
-    circuit.generate_constraints(cs.clone()).unwrap();
-    println!("Num constraints2: {:?}", cs.num_constraints());
-    assert!(cs.is_satisfied().unwrap());
+    // let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
+    // circuit.generate_constraints(cs.clone()).unwrap();
+    // println!("Num constraints2: {:?}", cs.num_constraints());
+    // assert!(cs.is_satisfied().unwrap());
+
+
+    let mut rng2 = rand_chacha::ChaChaRng::seed_from_u64(1776);
+    let (pk, vk) = Groth16::<ark_bw6_761::BW6_761>::circuit_specific_setup(circuit.clone(), &mut rng2).unwrap();
+    let proof = Groth16::<ark_bw6_761::BW6_761>::prove(&pk, circuit.clone(), &mut OsRng).unwrap();
+    let ok = Groth16::<ark_bw6_761::BW6_761>::verify(&pk.vk, &[], &proof).unwrap();
+    assert!(ok);
   }
 }
