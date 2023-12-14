@@ -22,7 +22,7 @@ impl<F: PrimeField> Transcript for PoseidonTranscript<F> {
   fn append<S: CanonicalSerialize>(&mut self, _label: &'static [u8], point: &S) {
     let mut buf = Vec::new();
     point
-      .serialize_with_mode(&mut buf, Compress::No)
+      .serialize_with_mode(&mut buf, Compress::Yes)
       .expect("serialization failed");
     self.sponge.absorb(&buf);
   }

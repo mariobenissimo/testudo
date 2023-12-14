@@ -19,6 +19,47 @@ use ark_serialize::CanonicalSerialize;
 use ark_serialize::Compress;
 use poseidon_parameters::PoseidonParameters;
 use std::marker::PhantomData;
+use ark_crypto_primitives::sponge::Absorb;
+struct TestudoCommVerifier1<E, IV>
+where
+  E: Pairing,
+  IV: PairingVar<E>,
+{
+  g1: E::G1Affine,
+  poseidon_params: PoseidonConfig<E::BaseField>,
+  _iv: PhantomData<IV>,
+}
+impl<E, IV> ConstraintSynthesizer<<E as Pairing>::BaseField> for TestudoCommVerifier1<E, IV>
+where
+  E: Pairing,
+  E::G1Affine: Absorb,
+  IV: PairingVar<E>,
+  IV::G1Var: CurveVar<E::G1, E::BaseField> + AbsorbGadget<E::BaseField>,
+{
+  fn generate_constraints(
+    mut self,
+    cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
+  ) -> Result<(), SynthesisError> {
+
+    // 
+    let mut native_sponge = PoseidonSponge::<E::BaseField>::new(&self.poseidon_params);
+    native_sponge.absorb(&self.g1);
+
+    let hash2 : E::ScalarField = native_sponge.squeeze_field_elements(1).remove(0);
+    
+    println!("hash nativo con gadget absorb {:?}", hash2);
+
+    let g1_var = IV::G1Var::new_input(cs.clone(), || Ok(self.g1))?;
+
+    let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
+
+    sponge.absorb(&g1_var);
+    let hash = sponge.squeeze_nonnative_field_elements::<E::ScalarField>(1);
+
+    println!("hash circuito con gadget absorb{:?}", hash.unwrap().0.value().unwrap());
+    Ok(())
+  }
+}
 struct TestudoCommVerifier<E, IV>
 where
   E: Pairing,
@@ -32,6 +73,7 @@ where
 impl<E, IV> ConstraintSynthesizer<<E as Pairing>::BaseField> for TestudoCommVerifier<E, IV>
 where
   E: Pairing,
+  E::G1Affine: Absorb,
   IV: PairingVar<E>,
   IV::G1Var: CurveVar<E::G1, E::BaseField>,
 {
@@ -39,97 +81,14 @@ where
     mut self,
     cs: ConstraintSystemRef<<E as Pairing>::BaseField>,
   ) -> Result<(), SynthesisError> {
-    // let hash_in_fq = &E::BaseField::from_bigint(
-    //   <E::BaseField as PrimeField>::BigInt::from_bits_le(self.hash.into_bigint().to_bits_le().as_slice()),
-    // )
-    // .unwrap();
-
-    // let real_hash_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.hash)).unwrap();
-
-    // println!("REAL HASH VAR");
-    // println!("{:?}", real_hash_var.value().unwrap());
-
-    // // let scalar_in_fq = &E::BaseField::from_bigint(
-    // //   <E::BaseField as PrimeField>::BigInt::from_bits_le(self.scalar.into_bigint().to_bits_le().as_slice()),
-    // // )
-    // // .unwrap();
 
     let g1_var = IV::G1Var::new_input(cs.clone(), || Ok(self.g1))?;
 
-    //let scalar_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(ark_relations::ns!(cs, "resi"), || Ok(self.g1))?;
-
-    // //let scalar_var_fq = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
-    // // println!("SCALAR VAR");
-    // // println!("{:?}", scalar_var.value().unwrap());
-
-    // // let mut buf3 = Vec::new();
-    // // scalar_var.value().unwrap()
-    // //   .serialize_with_mode(&mut buf3, Compress::Yes)
-    // //   .expect("serialization failed");
-
-    // // println!("SCALAR VAR BYTES");
-    // // println!("{:?}", buf3);
-
-    // self.constraint_sponge
-    //   .absorb(&scalar_var.to_bytes()?)
-    //   .unwrap();
-
-    // let (hash_var1, hash_var2) = self.constraint_sponge
-    //   .squeeze_nonnative_field_elements::<E::ScalarField>(1)
-    //   .unwrap();
-
-    // //let hash_var1 = self.constraint_sponge.squeeze_field_elements(1).unwrap().remove(0);
-    // println!("HASH_VAR 1: ");
-    // println!("{:?}", hash_var1.value().unwrap());
-
-    // // for i in hash_var2 {
-    // //   println!("{:?}", i.value().unwrap());
-    // // }
-    // // println!("HASH_VAR 2: ");
-    // // println!("{:?}", hash_var2);
-    //   real_hash_var.enforce_equal(&hash_var1[0]);
-
-    //     let mut constraint_sponge = PoseidonSpongeVar::new(cs.clone(), &params_to_base_field::<E>());
-    //    // let state_var = NonNativeFieldVar::<E::ScalarField, E::BaseField>::new_input(cs.clone(), || Ok(self.scalar)).unwrap();
-
-    //    let scalar_in_fq = &E::BaseField::from_bigint(
-    //       <E::BaseField as PrimeField>::BigInt::from_bits_le(self.scalar.into_bigint().to_bits_le().as_slice()),
-    //     )
-    //     .unwrap();
-
-    // let state_var = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
-
-    // println!("STATE VAR {:?}", state_var.value().unwrap());
-
-    // let mut x_var_vec: Vec<UInt8<_>> = Vec::new();
-    // for x in state_var.to_bytes()?.value().unwrap() {
-    //   x_var_vec.push(UInt8::new_input(cs.clone(), || Ok(x))?);
-    // }
-    // constraint_sponge
-    //   .absorb(&scalar_in_fq()?)
-    //   .unwrap();
-
-    // let (hash_var1, hash_var2) = constraint_sponge
-    //   .squeeze_nonnative_field_elements::<E::BaseField>(1).unwrap().pop()
-    //   .unwrap();
-    // println!("HASHVAR1 {:?}", hash_var1.value().unwrap()[0]);
-
-    // let scalar_in_fq = &E::BaseField::from_bigint(
-    //   <E::BaseField as PrimeField>::BigInt::from_bits_le(self.scalar.into_bigint().to_bits_le().as_slice()),
-    // )
-    // .unwrap();
-
-    // let p = FpVar::new_input(cs.clone(), || Ok(scalar_in_fq))?;
     let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_params);
 
-    println!("g1 {:?}", g1_var.value().unwrap().into_affine());
-
     let mut buf3 = Vec::new();
-    g1_var
-      .value()
-      .unwrap()
-      .into_affine()
-      .serialize_with_mode(&mut buf3, Compress::No)
+    self.g1
+      .serialize_with_mode(&mut buf3, Compress::Yes)
       .expect("serialization failed");
 
     let mut x_var_vec: Vec<UInt8<_>> = Vec::new();
@@ -173,15 +132,12 @@ mod tests {
     //let point = ark_bls12_377::G1Affine::rand(&mut rng);
     let g1 = ark_bls12_377::g1::G1Affine::rand(&mut rng);
 
-    println!("G1 ");
-    println!("{:?}", g1);
 
     native_sponge.append(b"U", &g1);
 
     let hash = native_sponge.challenge_scalar::<ark_bls12_377::Fr>(b"random_point");
 
-    println!("HASH: ");
-    println!("{:?}", hash);
+    println!("hash nativo con buffer: {:?}", hash);
 
     let circuit: TestudoCommVerifier<I, IV> = TestudoCommVerifier {
       g1,
@@ -191,5 +147,20 @@ mod tests {
 
     circuit.generate_constraints(cs.clone()).unwrap();
     assert!(cs.is_satisfied().unwrap());
+
+    println!("Num constraint con buffer: {:?}",cs.num_constraints());
+
+    let circuit2: TestudoCommVerifier1<I, IV> = TestudoCommVerifier1 {
+      g1,
+      poseidon_params: get_bls12377_fq_params(),
+      _iv: PhantomData,
+    };
+
+    let cs2 = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
+
+    circuit2.generate_constraints(cs2.clone()).unwrap();
+    assert!(cs2.is_satisfied().unwrap());
+
+    println!("Num constraint con gadget: {:?}",cs2.num_constraints());
   }
 }
