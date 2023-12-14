@@ -3,6 +3,7 @@ use libtestudo::circuit_verifier::TestudoCommVerifier;
 use libtestudo::{
   parameters::get_bls12377_fq_params, poseidon_transcript::PoseidonTranscript, sqrt_pst::Polynomial,
 };
+use ark_std::time::Instant;
 use ark_std::marker::PhantomData;
 use serde::Serialize;
 type F = ark_bls12_377::Fr;
@@ -12,11 +13,15 @@ use ark_relations::r1cs::ConstraintSystem;
 use ark_ec::bls12::Bls12;
 use ark_ec::pairing::Pairing;
 use ark_relations::r1cs::ConstraintSynthesizer;
-
+use ark_std::rand::SeedableRng;
+use ark_groth16::Groth16;
+use ark_snark::SNARK;
+use rand::rngs::OsRng;
 #[derive(Default, Clone, Serialize)]
 struct BenchmarkResults {
   power: usize,
   num_constraints: usize,
+  proving_time: u128,
 }
 fn main() {
   let params = get_bls12377_fq_params();
@@ -62,10 +67,26 @@ fn main() {
         _iv: PhantomData,
       };
     let cs = ConstraintSystem::<<Bls12<ark_bls12_377::Config> as Pairing>::BaseField>::new_ref();
-    circuit.generate_constraints(cs.clone()).unwrap();
-    assert!(cs.is_satisfied().unwrap());
+    circuit.clone().generate_constraints(cs.clone()).unwrap();
+   // assert!(cs.is_satisfied().unwrap());
     br.num_constraints =  cs.num_constraints();
 
+
+    let mut rng2 = rand_chacha::ChaChaRng::seed_from_u64(1776);
+    let (pk, vk) = Groth16::<ark_bw6_761::BW6_761>::circuit_specific_setup(circuit.clone(), &mut rng2).unwrap();
+
+
+    let start = Instant::now();
+
+    let proof = Groth16::<ark_bw6_761::BW6_761>::prove(&pk, circuit.clone(), &mut OsRng).unwrap();
+
+    let duration = start.elapsed().as_millis();
+    
+    br.proving_time = duration;
+
+
+    let ok = Groth16::<ark_bw6_761::BW6_761>::verify(&pk.vk, &[], &proof).unwrap();
+    assert!(ok);
 
     writer
       .serialize(br)
